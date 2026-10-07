@@ -47,6 +47,7 @@ table{border-collapse:collapse;width:100%}
 th{background:var(--azul);color:#fff;text-align:left;padding:7px 8px;font-size:12px;position:sticky;top:0;white-space:nowrap}
 td{padding:6px 8px;border-bottom:1px solid #e6e9f0;vertical-align:middle}
 tr.g td{background:#e8eef8;font-weight:700;color:var(--azul2)}
+tr.sg td{background:#f4f7fc;font-weight:600;color:var(--azul2);padding-left:14px;border-top:2px solid #d5e0f3}
 td.ok{background:var(--ok);color:var(--okT);font-weight:600}
 td.mal{background:var(--mal);color:var(--malT);font-weight:600}
 td.av{background:var(--av);color:var(--avT)}
@@ -135,7 +136,7 @@ td.av{background:var(--av);color:var(--avT)}
       <label>Clave extensión SIP<input id="c_clave_ext"></label>
     </div>
   </div>
-  <datalist id="dlTipos"><option>RCU</option><option>Teléfono IP</option><option>Parlante</option><option>Servidor</option><option>Videoportero</option><option>Lector</option></datalist>
+  <datalist id="dlTipos"><option>RCU</option><option>Teléfono IP</option><option>Parlante</option><option>Servidor</option><option>PC</option><option>Videoportero</option><option>Lector</option></datalist>
   <div class="pie"><button class="peligro" id="eDel">Eliminar</button><span class="sep"></span><button id="eHist">Historial</button><button id="eCan">Cancelar</button><button class="pri" id="eOk">Guardar</button></div>
 </div></div>
 
@@ -239,11 +240,27 @@ function filaEq(e,mostrarPiso){
    <td class="mono">${esc((c.firmware||e.version||'').replace(/^HELP_IP\//,'').slice(0,28))}</td>
    <td class="obs">${esc(obs)}</td></tr>`;
 }
+// Agrupa los equipos de un piso por Office/sector; el voceo va aparte al final.
+function gruposPiso(l){
+  const voceo=l.filter(e=>e.sistema==='Voceo'), resto=l.filter(e=>e.sistema!=='Voceo');
+  const sectores=[...new Set(resto.map(e=>e.sector||''))];
+  const g=[];
+  if(sectores.length>1){const m={};resto.forEach(e=>{const k=e.sector||'Sin sector';(m[k]=m[k]||[]).push(e)});
+    Object.entries(m).sort((a,b)=>Math.min(...a[1].map(e=>ipNum(e.ip)))-Math.min(...b[1].map(e=>ipNum(e.ip)))).forEach(([k,v])=>g.push([k,v]))}
+  else if(resto.length) g.push([voceo.length?'Llamadores y Office':'',resto]);
+  if(voceo.length) g.push(['Voceo · parlantes y servidor',voceo]);
+  return g.map(([k,v])=>(k?`<tr class="sg"><td colspan="12">${esc(k)} <span class="badge">${v.length}</span></td></tr>`:'')+v.map(e=>filaEq(e)).join('')).join('');
+}
 const CAB='<tr><th>Equipo</th><th>Tipo</th><th>IP</th><th>Ext.</th><th>Estado</th><th>Acceso web</th><th>Registrado</th><th>Actividad</th><th>Chequeado</th><th>MAC</th><th>Firmware</th><th>Observaciones</th></tr>';
 function kpis(lista){
   const ch=lista.filter(e=>e.ult_chequeo);let reg=0,noreg=0,sin=0,rei=0;
   ch.forEach(e=>{const c=e.ult_chequeo;if(!c.accesoWeb)sin++;else if(c.registrado===true)reg++;else noreg++;if(c.uptimeSeg>0&&c.uptimeSeg<86400)rei++});
-  return `<div class="kpis"><div class="kpi"><div class="n">${lista.length}</div><div class="l">equipos</div></div><div class="kpi"><div class="n">${ch.length}</div><div class="l">con chequeo</div></div>
+  const cat={rcu:0,voceo:0,tel:0,pc:0,otros:0};
+  lista.forEach(e=>{const t=(e.tipo_equipo||'').toLowerCase();
+    if(t==='rcu')cat.rcu++;else if(e.sistema==='Voceo')cat.voceo++;else if(t.includes('tel'))cat.tel++;else if(t==='pc')cat.pc++;else cat.otros++});
+  const pl=(n,s,p)=>n+' '+(n===1?s:p);
+  const det=[cat.rcu&&pl(cat.rcu,'RCU','RCU'),cat.voceo&&pl(cat.voceo,'voceo','voceo'),cat.tel&&pl(cat.tel,'teléfono IP','teléfonos IP'),cat.pc&&pl(cat.pc,'PC','PC'),cat.otros&&pl(cat.otros,'otro','otros')].filter(Boolean).join(' · ');
+  return `<div class="kpis"><div class="kpi"><div class="n">${lista.length}</div><div class="l">equipos</div>${det?`<div class="l" style="margin-top:3px;color:var(--txt)">${det}</div>`:''}</div><div class="kpi"><div class="n">${ch.length}</div><div class="l">con chequeo</div></div>
   <div class="kpi ok"><div class="n">${reg}</div><div class="l">registrados</div></div><div class="kpi mal"><div class="n">${noreg}</div><div class="l">no registrados</div></div>
   <div class="kpi mal"><div class="n">${sin}</div><div class="l">sin acceso web</div></div><div class="kpi av"><div class="n">${rei}</div><div class="l">reiniciados 24 h</div></div></div>`;
 }
@@ -273,8 +290,9 @@ function renderMain(){
     ac.forEach(a=>{const pn=D.pisos.find(p=>p.id===a.piso_id)?.nombre;tabs.push(`<div class="panel"><h3>Accesos · ${esc(pn)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`)});
     if(piso&&!ac.length)tabs.push(`<div class="panel"><h3>Accesos · ${esc(piso.nombre)} <button data-acc="nuevo" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`)}
   let body='';
-  if(SEL.piso) body=lista.map(e=>filaEq(e)).join('');
-  else for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length)continue;body+=`<tr class="g"><td colspan="12">${esc(p.nombre)}</td></tr>`+l.map(e=>filaEq(e)).join('')}
+  for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length)continue;
+    if(!SEL.piso)body+=`<tr class="g"><td colspan="12">${esc(p.nombre)}</td></tr>`;
+    body+=gruposPiso(l)}
   h+=`<div class="tabla" style="margin-bottom:12px"><table><thead>${CAB}</thead><tbody>${body||'<tr><td colspan="12" class="vacio">Sin equipos</td></tr>'}</tbody></table></div>`+tabs.join('');
   $('main').innerHTML=h;
   $('fSis').onchange=e=>{FILT.sis=e.target.value;renderMain()};

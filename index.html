@@ -23,6 +23,9 @@ button:disabled{opacity:.5;cursor:default}
 input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--borde);border-radius:6px;background:#fff;color:var(--txt);width:100%}
 textarea{min-height:60px}
 .wrap{display:grid;grid-template-columns:250px 1fr;min-height:calc(100vh - 48px)}
+body.sinPanel .wrap{grid-template-columns:1fr}body.sinPanel aside{display:none}
+.tog{display:inline-block;width:16px;color:var(--sub);cursor:pointer}
+.arbBtns{display:flex;gap:4px;margin:0 0 6px}.arbBtns button{padding:2px 8px;font-size:11px}
 aside{background:#fff;border-right:1px solid var(--borde);padding:12px;overflow:auto}
 aside h4{margin:12px 0 6px;color:var(--sub);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 .inst{margin-bottom:6px}
@@ -91,7 +94,7 @@ td.av{background:var(--av);color:var(--avT)}
 
 <div id="vApp" style="display:none">
 <header>
-  <span class="marca">Surix Uruguay · Instalaciones</span><span class="sep"></span>
+  <button id="bPanel" title="Mostrar / ocultar el menú de instalaciones">☰</button><span class="marca">Surix Uruguay · Instalaciones</span><span class="sep"></span>
   <span class="usr" id="hUsr"></span>
   <button id="bUsuarios" style="display:none">Usuarios</button>
   <button id="bClave">Cambiar clave</button>
@@ -101,6 +104,7 @@ td.av{background:var(--av);color:var(--avT)}
   <aside>
     <input id="fMac" placeholder="Buscar MAC / IP / ext. en todo" class="mono" style="margin-bottom:8px">
     <h4>Instalaciones</h4>
+    <div class="arbBtns"><button onclick="todasArbol(true)">▾ Expandir todo</button><button onclick="todasArbol(false)">▸ Contraer todo</button></div>
     <div id="arbol"></div>
     <div class="soloEd" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button id="bNuevaInst">+ Instalación</button><button id="bNuevoPiso">+ Piso/Sector</button></div>
   </aside>
@@ -206,12 +210,21 @@ function problema(e){const c=e.ult_chequeo;if(c)return !c.accesoWeb||c.registrad
 
 // ---------- Render ----------
 function render(){renderArbol();renderMain()}
+// Árbol con instalaciones que se abren/cierran; el estado queda guardado en el navegador.
+let ABIERTAS={};try{ABIERTAS=JSON.parse(localStorage.getItem('inst_abiertas')||'{}')}catch(e){}
+const guardarAb=()=>{try{localStorage.setItem('inst_abiertas',JSON.stringify(ABIERTAS))}catch(e){}};
+const abierta=id=>ABIERTAS[id]??(id===SEL.inst);
 function renderArbol(){
-  $('arbol').innerHTML=D.inst.map(i=>{const ps=pisosDe(i.id);
-    return `<div class="inst"><div class="${SEL.inst===i.id&&!SEL.piso?'sel':''}" data-i="${esc(i.id)}">${esc(i.nombre)} <span class="tipo">${esc(i.tipo)}</span></div>`+
-    ps.map(p=>{const n=eqDe(p.id).filter(problema).length;return `<div class="piso ${SEL.piso===p.id?'sel':''}" data-p="${esc(p.id)}" data-i="${esc(i.id)}"><span>${esc(p.nombre)}</span>${n?`<span class="badge mal">${n}</span>`:''}</div>`}).join('')+'</div>'}).join('')||'<div class="vacio">Sin instalaciones</div>';
+  $('arbol').innerHTML=D.inst.map(i=>{const ps=pisosDe(i.id),ab=abierta(i.id);
+    const prob=ps.reduce((t,p)=>t+eqDe(p.id).filter(problema).length,0);
+    return `<div class="inst"><div class="${SEL.inst===i.id&&!SEL.piso?'sel':''}" data-i="${esc(i.id)}"><span class="tog" data-t="${esc(i.id)}">${ab?'▾':'▸'}</span>${esc(i.nombre)} <span class="tipo">${esc(i.tipo)}</span>${!ab&&prob?` <span class="badge mal">${prob}</span>`:''}</div>`+
+    (ab?ps.map(p=>{const n=eqDe(p.id).filter(problema).length;return `<div class="piso ${SEL.piso===p.id?'sel':''}" data-p="${esc(p.id)}" data-i="${esc(i.id)}"><span>${esc(p.nombre)}</span>${n?`<span class="badge mal">${n}</span>`:''}</div>`}).join(''):'')+'</div>'}).join('')||'<div class="vacio">Sin instalaciones</div>';
 }
-$('arbol').onclick=ev=>{const d=ev.target.closest('[data-i]');if(!d)return;SEL.inst=d.dataset.i;SEL.piso=d.dataset.p||null;$('fMac').value='';render()};
+function todasArbol(v){D.inst.forEach(i=>ABIERTAS[i.id]=v);guardarAb();renderArbol()}
+$('arbol').onclick=ev=>{const t=ev.target.closest('[data-t]');if(t){const id=t.dataset.t;ABIERTAS[id]=!abierta(id);guardarAb();renderArbol();return}
+  const d=ev.target.closest('[data-i]');if(!d)return;SEL.inst=d.dataset.i;SEL.piso=d.dataset.p||null;if(!d.dataset.p){ABIERTAS[SEL.inst]=true;guardarAb()}$('fMac').value='';render()};
+$('bPanel').onclick=()=>{const c=document.body.classList.toggle('sinPanel');try{localStorage.setItem('inst_sinPanel',c?'1':'')}catch(e){}};
+try{if(localStorage.getItem('inst_sinPanel'))document.body.classList.add('sinPanel')}catch(e){}
 $('fMac').oninput=()=>renderMain();
 
 function celdasChequeo(e){
@@ -244,7 +257,7 @@ function filaEq(e,mostrarPiso){
 // Agrupa los equipos de un piso por tipo, igual en todos los pisos.
 function catEq(e){const t=(e.tipo_equipo||'').toLowerCase();
   if(e.sistema==='Voceo')return 3; if(t==='rcu')return 0; if(t.includes('tel'))return 1; if(t==='pc')return 2; return 4}
-const CATS=['Llamadores (RCU)','Teléfonos IP','PC','Voceo · parlantes y servidor','Otros equipos'];
+const CATS=['Llamadores (RCU)','Teléfonos IP','PC','Voceo · parlantes','Otros equipos'];
 function gruposPiso(l){
   const g=[[],[],[],[],[]]; l.forEach(e=>g[catEq(e)].push(e));
   return g.map((v,i)=>v.length?`<tr class="sg"><td colspan="12">${CATS[i]} <span class="badge">${v.length}</span></td></tr>`+v.map(e=>filaEq(e)).join(''):'').join('');

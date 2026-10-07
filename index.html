@@ -241,16 +241,13 @@ function filaEq(e,mostrarPiso){
    <td class="mono">${esc((c.firmware||e.version||'').replace(/^HELP_IP\//,'').slice(0,28))}</td>
    <td class="obs">${esc(obs)}</td></tr>`;
 }
-// Agrupa los equipos de un piso por Office/sector; el voceo va aparte al final.
+// Agrupa los equipos de un piso por tipo, igual en todos los pisos.
+function catEq(e){const t=(e.tipo_equipo||'').toLowerCase();
+  if(e.sistema==='Voceo')return 3; if(t==='rcu')return 0; if(t.includes('tel'))return 1; if(t==='pc')return 2; return 4}
+const CATS=['Llamadores (RCU)','Teléfonos IP','PC','Voceo · parlantes y servidor','Otros equipos'];
 function gruposPiso(l){
-  const voceo=l.filter(e=>e.sistema==='Voceo'), resto=l.filter(e=>e.sistema!=='Voceo');
-  const sectores=[...new Set(resto.map(e=>e.sector||''))];
-  const g=[];
-  if(sectores.length>1){const m={};resto.forEach(e=>{const k=e.sector||'Sin sector';(m[k]=m[k]||[]).push(e)});
-    Object.entries(m).sort((a,b)=>Math.min(...a[1].map(e=>ipNum(e.ip)))-Math.min(...b[1].map(e=>ipNum(e.ip)))).forEach(([k,v])=>g.push([k,v]))}
-  else if(resto.length) g.push([voceo.length?'Llamadores y Office':'',resto]);
-  if(voceo.length) g.push(['Voceo · parlantes y servidor',voceo]);
-  return g.map(([k,v])=>(k?`<tr class="sg"><td colspan="12">${esc(k)} <span class="badge">${v.length}</span></td></tr>`:'')+v.map(e=>filaEq(e)).join('')).join('');
+  const g=[[],[],[],[],[]]; l.forEach(e=>g[catEq(e)].push(e));
+  return g.map((v,i)=>v.length?`<tr class="sg"><td colspan="12">${CATS[i]} <span class="badge">${v.length}</span></td></tr>`+v.map(e=>filaEq(e)).join(''):'').join('');
 }
 const CAB='<tr><th>Equipo</th><th>Tipo</th><th>IP</th><th>Ext.</th><th>Estado</th><th>Acceso web</th><th>Registrado</th><th>Actividad</th><th>Chequeado</th><th>MAC</th><th>Firmware</th><th>Observaciones</th></tr>';
 function kpis(lista){

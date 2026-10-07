@@ -285,7 +285,7 @@ function renderMain(){
     document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc)))}
 }
 $('main').addEventListener('click',ev=>{const tr=ev.target.closest('tr[data-id]');if(tr)abrirEq(D.eq.find(e=>e.id===tr.dataset.id))});
-const ETQ={office:'Office',panelUrl:'Panel enfermería (URL)',panelUser:'Panel usuario',panelPass:'Panel clave',pcIp:'PC IP',pcLogin:'PC login',phoneIp:'Teléfono IP',phoneExt:'Teléfono ext.',phonePass:'Teléfono clave ext.',phoneWebUser:'Teléfono web usuario',phoneWebPass:'Teléfono web clave'};
+const ETQ={office:'Office',panelUrl:'Panel enfermería (URL)',panelUser:'Panel usuario (Office)',panelPass:'Panel clave (Office)',pcIp:'PC IP',pcLogin:'PC login',phoneIp:'Teléfono IP',phoneModel:'Teléfono (marca y modelo)',phoneExt:'Teléfono ext.',phonePass:'Teléfono clave ext.',phoneWebUser:'Teléfono web usuario',phoneWebPass:'Teléfono web clave'};
 const etqAcc=k=>ETQ[k]||k;
 
 // ---------- Equipo ----------

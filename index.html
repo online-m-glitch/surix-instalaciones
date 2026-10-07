@@ -194,8 +194,9 @@ sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_IN'&&!ROL)iniciar()});
 async function cargar(){
   const [i,p,e]=await Promise.all([sb.from('inst_instalaciones').select('*').order('nombre'),sb.from('inst_pisos').select('*').order('orden'),sb.from('inst_equipos').select('*').order('id')]);
   for(const r of [i,p,e]) if(r.error){alert('Error al leer datos: '+r.error.message);return}
-  D.inst=i.data;D.pisos=p.data;D.eq=e.data;
-  if(puedeEd()){const [a,c]=await Promise.all([sb.from('inst_accesos').select('*'),sb.from('inst_credenciales').select('*')]);D.acc=a.data||[];D.cred={};(c.data||[]).forEach(x=>D.cred[x.equipo_id]=x)}
+  D.inst=i.data;D.pisos=p.data;D.eq=e.data;D.servCred={};
+  {const s=await sb.from('inst_servidores').select('*').order('orden');D.serv=s.data||[]}
+  if(puedeEd()){const [a,c]=await Promise.all([sb.from('inst_accesos').select('*'),sb.from('inst_credenciales').select('*')]);D.acc=a.data||[];D.cred={};(c.data||[]).forEach(x=>D.cred[x.equipo_id]=x);const sc=await sb.from('inst_servidor_cred').select('*');(sc.data||[]).forEach(x=>D.servCred[x.servidor_id]=x)}
   if(!SEL.inst&&D.inst.length)SEL.inst=D.inst.find(x=>x.id==='hospital-de-clinicas')?.id||D.inst[0].id;
 }
 const pisosDe=iid=>D.pisos.filter(p=>p.instalacion_id===iid).sort((a,b)=>a.orden-b.orden);
@@ -285,7 +286,7 @@ function renderMain(){
   h+=`<div class="barra"><select id="fSis"><option value="">Todos los sistemas</option>${sistemas.map(s=>`<option ${FILT.sis===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
    <input id="fTxt" placeholder="Buscar equipo, IP, ext…" value="${esc(FILT.txt)}" style="width:220px"><label><input type="checkbox" id="fProb" ${FILT.prob?'checked':''} style="width:auto"> Solo con problemas</label></div>`;
   const tabs=[];
-  if(!piso){const r=inst.red||{};tabs.push(`<div class="panel"><h3>Red de la instalación</h3><div class="kv">${Object.entries(r).map(([k,v])=>`<div><span>${esc(k)}</span>${esc(v)}</div>`).join('')||'<div style="color:var(--sub)">Sin datos de red</div>'}</div></div>`)}
+  if(!piso)tabs.push(panelRed(inst));
   if(puedeEd()){const ac=D.acc.filter(a=>pisos.some(p=>p.id===a.piso_id));
     ac.forEach(a=>{const pn=D.pisos.find(p=>p.id===a.piso_id)?.nombre;tabs.push(`<div class="panel"><h3>Accesos · ${esc(pn)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`)});
     if(piso&&!ac.length)tabs.push(`<div class="panel"><h3>Accesos · ${esc(piso.nombre)} <button data-acc="nuevo" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`)}
@@ -300,6 +301,8 @@ function renderMain(){
   $('fProb').onchange=e=>{FILT.prob=e.target.checked;renderMain()};
   $('bCsv').onclick=()=>csv(lista,inst,piso);
   if(puedeEd()){$('bNuevoEq').onclick=()=>abrirEq(null);$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
+    document.querySelectorAll('[data-red]').forEach(b=>b.onclick=()=>editarRed(inst));
+    document.querySelectorAll('[data-srv]').forEach(b=>b.onclick=()=>editarServ(b.dataset.srv==='nuevo'?null:D.serv.find(x=>x.id===b.dataset.srv),inst));
     document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc)))}
 }
 $('main').addEventListener('click',ev=>{const tr=ev.target.closest('tr[data-id]');if(tr)abrirEq(D.eq.find(e=>e.id===tr.dataset.id))});
@@ -349,17 +352,54 @@ $('gOk').onclick=async()=>{const r=await gFn();if(r!==false){$('mGen').classList
 $('gDel').onclick=async()=>{if(!confirm('¿Eliminar? Se borra todo lo que contiene.'))return;const r=await gDelFn();if(r!==false){$('mGen').classList.remove('on');SEL.piso=null;await cargar();render()}};
 const slug=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||('x'+Date.now());
 
+// ---------- Red y servidores ----------
+function panelRed(inst){
+  const r=inst.red||{},sv=(D.serv||[]).filter(s=>s.instalacion_id===inst.id),ed=puedeEd();
+  const campo=(l,v)=>`<div><span>${l}</span>${esc(v||'—')}</div>`;
+  let h=`<div class="panel"><h3>Red y servidores${ed?`<span style="float:right"><button data-red="1">Editar red</button> <button data-srv="nuevo">+ Servidor</button></span>`:''}</h3>
+  <div class="kv">${campo('Máscara',r.mascara)}${campo('Gateway',r.gateway)}${campo('Puerto de las placas',r.puerto)}${r.dns?campo('DNS',r.dns):''}${r.vlan?campo('VLAN',r.vlan):''}</div>${r.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(r.obs)}</div>`:''}`;
+  if(sv.length){
+    h+=`<div class="tabla" style="margin-top:10px"><table><thead><tr><th>Servidor</th><th>Tipo</th><th>IP</th><th>Puerto</th><th>Acceso web</th>${ed?'<th>Usuario</th><th>Clave</th>':''}<th>Observaciones</th>${ed?'<th></th>':''}</tr></thead><tbody>`+
+    sv.map(s=>{const c=(D.servCred||{})[s.id]||{};const url=s.url||(s.ip?`http://${s.ip}${s.puerto&&s.puerto!=80?':'+s.puerto:''}/`:'');
+      return `<tr><td><b>${esc(s.nombre)}</b></td><td>${esc(s.tipo||'')}</td><td class="mono">${esc(s.ip||'')}</td><td>${esc(s.puerto||'')}</td><td>${url?`<a href="${esc(url)}" target="_blank">${esc(url)}</a>`:''}</td>${ed?`<td class="mono">${esc(c.usuario||'')}</td><td class="mono">${esc(c.clave||'')}</td>`:''}<td class="obs">${esc(s.obs||'')}</td>${ed?`<td><button data-srv="${esc(s.id)}">Editar</button></td>`:''}</tr>`}).join('')+'</tbody></table></div>';
+  } else h+='<div style="margin-top:8px;color:var(--sub)">Sin servidores cargados</div>';
+  return h+'</div>';
+}
+function editarRed(inst){
+  const r=inst.red||{};
+  gen('Red de la instalación',`<div class="grid"><label>Máscara<input id="r_m" value="${esc(r.mascara)}"></label><label>Gateway<input id="r_g" value="${esc(r.gateway)}"></label><label>Puerto de las placas<input id="r_p" value="${esc(r.puerto)}"></label>
+   <label>DNS<input id="r_d" value="${esc(r.dns)}"></label><label>VLAN<input id="r_v" value="${esc(r.vlan)}"></label><label class="f3">Observaciones<textarea id="r_o">${esc(r.obs)}</textarea></label></div>`,
+  async()=>{const red={...r,mascara:$('r_m').value.trim(),gateway:$('r_g').value.trim(),puerto:$('r_p').value.trim(),dns:$('r_d').value.trim(),vlan:$('r_v').value.trim(),obs:$('r_o').value.trim()};
+    Object.keys(red).forEach(k=>{if(red[k]==='')delete red[k]});
+    const x=await sb.from('inst_instalaciones').update({red,updated_at:new Date().toISOString()}).eq('id',inst.id);if(x.error){alert(x.error.message);return false}});
+}
+function editarServ(s,inst){
+  const c=s?((D.servCred||{})[s.id]||{}):{};
+  gen(s?'Editar servidor':'Nuevo servidor',`<div class="grid"><label class="f2">Nombre<input id="s_n" value="${esc(s?.nombre)}" placeholder="Servidor Help IP"></label>
+   <label>Tipo<select id="s_t">${['Help IP','Voceo','Videoportero IP','Control de acceso','Otro'].map(t=>`<option ${s?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
+   <label>IP<input id="s_ip" class="mono" value="${esc(s?.ip)}"></label><label>Puerto<input id="s_p" type="number" value="${esc(s?.puerto)}"></label><label>Orden<input id="s_o" type="number" value="${s?.orden??((D.serv||[]).filter(x=>x.instalacion_id===inst.id).length+1)}"></label>
+   <label class="f3">Acceso web (URL)<input id="s_u" value="${esc(s?.url)}" placeholder="http://10.65.6.250/enfermeria/"></label>
+   <label>Usuario<input id="s_us" value="${esc(c.usuario)}"></label><label>Clave<input id="s_cl" value="${esc(c.clave)}"></label><label></label>
+   <label class="f3">Observaciones<textarea id="s_ob">${esc(s?.obs)}</textarea></label></div>`,
+  async()=>{const n=$('s_n').value.trim();if(!n){alert('Falta el nombre');return false}
+    const d={instalacion_id:inst.id,nombre:n,tipo:$('s_t').value,ip:$('s_ip').value.trim()||null,puerto:+$('s_p').value||null,url:$('s_u').value.trim()||null,obs:$('s_ob').value.trim()||null,orden:+$('s_o').value||0,updated_at:new Date().toISOString()};
+    const id=s?s.id:slug(inst.id.slice(0,12)+'-'+n);
+    const x=s?await sb.from('inst_servidores').update(d).eq('id',id):await sb.from('inst_servidores').insert({...d,id});if(x.error){alert(x.error.message);return false}
+    const us=$('s_us').value.trim(),cl=$('s_cl').value;
+    if(us||cl||(D.servCred||{})[id]){const y=await sb.from('inst_servidor_cred').upsert({servidor_id:id,usuario:us||null,clave:cl||null,updated_at:new Date().toISOString()});if(y.error){alert('Servidor guardado, pero no el usuario/clave: '+y.error.message)}}},
+  s&&ROL==='admin'?async()=>{const x=await sb.from('inst_servidores').delete().eq('id',s.id);if(x.error){alert(x.error.message);return false}}:null);
+}
 function editarInst(i){
   const red=i?.red||{};
   gen(i?'Editar instalación':'Nueva instalación',`<div class="grid"><label class="f2">Nombre<input id="g_n" value="${esc(i?.nombre)}"></label>
    <label>Tipo<select id="g_t">${['Empresa','Clínica','Hospital','Colegio','Edificio','Otro'].map(t=>`<option ${i?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
    <label class="f3">Cliente<input id="g_c" value="${esc(i?.cliente)}"></label>
-   <label>Servidor<input id="g_srv" value="${esc(red.servidor)}"></label><label>Máscara<input id="g_mask" value="${esc(red.mascara)}"></label><label>Gateway<input id="g_gw" value="${esc(red.gateway)}"></label>
+   <label>Máscara<input id="g_mask" value="${esc(red.mascara)}"></label><label>Gateway<input id="g_gw" value="${esc(red.gateway)}"></label>
    <label>Puerto placas<input id="g_pto" value="${esc(red.puerto)}"></label><label class="f2">Obs. de red<input id="g_robs" value="${esc(red.obs)}"></label>
    <label class="f3">Notas<textarea id="g_notas">${esc(i?.notas)}</textarea></label></div>`,
   async()=>{const n=$('g_n').value.trim();if(!n){alert('Falta el nombre');return false}
     const d={nombre:n,tipo:$('g_t').value,cliente:$('g_c').value.trim()||null,notas:$('g_notas').value.trim()||null,updated_at:new Date().toISOString(),
-      red:{...red,servidor:$('g_srv').value.trim(),mascara:$('g_mask').value.trim(),gateway:$('g_gw').value.trim(),puerto:$('g_pto').value.trim(),obs:$('g_robs').value.trim()}};
+      red:{...red,mascara:$('g_mask').value.trim(),gateway:$('g_gw').value.trim(),puerto:$('g_pto').value.trim(),obs:$('g_robs').value.trim()}};
     const r=i?await sb.from('inst_instalaciones').update(d).eq('id',i.id):await sb.from('inst_instalaciones').insert({...d,id:slug(n)});
     if(r.error){alert(r.error.message);return false} if(!i)SEL.inst=slug(n)},
   i&&ROL==='admin'?async()=>{const r=await sb.from('inst_instalaciones').delete().eq('id',i.id);if(r.error){alert(r.error.message);return false}SEL.inst=null}:null);

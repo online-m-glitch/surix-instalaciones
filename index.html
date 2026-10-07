@@ -304,10 +304,10 @@ function renderMain(){
   h+=`<div class="barra"><select id="fSis"><option value="">Todos los sistemas</option>${sistemas.map(s=>`<option ${FILT.sis===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
    <input id="fTxt" placeholder="Buscar equipo, IP, ext…" value="${esc(FILT.txt)}" style="width:220px"><label><input type="checkbox" id="fProb" ${FILT.prob?'checked':''} style="width:auto"> Solo con problemas</label></div>`;
   const tabs=[];
-  if(!piso)tabs.push(panelRed(inst));
   if(puedeEd()){const ac=D.acc.filter(a=>pisos.some(p=>p.id===a.piso_id));
     ac.forEach(a=>{const pn=D.pisos.find(p=>p.id===a.piso_id)?.nombre;tabs.push(`<div class="panel"><h3>Accesos · ${esc(pn)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`)});
     if(piso&&!ac.length)tabs.push(`<div class="panel"><h3>Accesos · ${esc(piso.nombre)} <button data-acc="nuevo" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`)}
+  tabs.push(panelRed(inst)); // datos generales de la instalación, al final de cada piso/Office
   let body='';
   const sinFiltro=!FILT.sis&&!FILT.txt&&!FILT.prob;
   for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length&&!(sinFiltro&&SEL.piso))continue;

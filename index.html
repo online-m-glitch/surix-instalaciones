@@ -258,9 +258,17 @@ function filaEq(e,mostrarPiso){
 function catEq(e){const t=(e.tipo_equipo||'').toLowerCase();
   if(e.sistema==='Voceo')return 3; if(t==='rcu')return 0; if(t.includes('tel'))return 1; if(t==='pc')return 2; return 4}
 const CATS=['Llamadores (RCU)','Teléfonos IP','PC','Voceo · parlantes','Otros equipos'];
-function gruposPiso(l){
+// Todos los pisos/offices muestran siempre Llamadores, Teléfonos IP y PC (aunque estén vacíos), salvo los pisos solo de voceo.
+const TIPO_CAT=['RCU','Teléfono IP','PC'];
+function gruposPiso(l,p,base){
   const g=[[],[],[],[],[]]; l.forEach(e=>g[catEq(e)].push(e));
-  return g.map((v,i)=>v.length?`<tr class="sg"><td colspan="12">${CATS[i]} <span class="badge">${v.length}</span></td></tr>`+v.map(e=>filaEq(e)).join(''):'').join('');
+  const soloVoceo=l.length&&l.every(e=>catEq(e)===3);
+  return g.map((v,i)=>{
+    if(!v.length&&!(base&&!soloVoceo&&i<3))return '';
+    const cab=`<tr class="sg"><td colspan="12">${CATS[i]} <span class="badge">${v.length}</span></td></tr>`;
+    if(v.length)return cab+v.map(e=>filaEq(e)).join('');
+    return cab+`<tr><td colspan="12" style="color:var(--sub);font-style:italic">Sin cargar${puedeEd()&&p?` <button data-nuevo="${esc(p.id)}|${TIPO_CAT[i]}" style="margin-left:8px;font-style:normal">+ agregar ${TIPO_CAT[i]}</button>`:''}</td></tr>`;
+  }).join('');
 }
 const CAB='<tr><th>Equipo</th><th>Tipo</th><th>IP</th><th>Ext.</th><th>Estado</th><th>Acceso web</th><th>Registrado</th><th>Actividad</th><th>Chequeado</th><th>MAC</th><th>Firmware</th><th>Observaciones</th></tr>';
 function kpis(lista){
@@ -301,16 +309,18 @@ function renderMain(){
     ac.forEach(a=>{const pn=D.pisos.find(p=>p.id===a.piso_id)?.nombre;tabs.push(`<div class="panel"><h3>Accesos · ${esc(pn)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`)});
     if(piso&&!ac.length)tabs.push(`<div class="panel"><h3>Accesos · ${esc(piso.nombre)} <button data-acc="nuevo" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`)}
   let body='';
-  for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length)continue;
+  const sinFiltro=!FILT.sis&&!FILT.txt&&!FILT.prob;
+  for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length&&!(sinFiltro&&SEL.piso))continue;
     if(!SEL.piso)body+=`<tr class="g"><td colspan="12">${esc(p.nombre)}</td></tr>`;
-    body+=gruposPiso(l)}
+    body+=gruposPiso(l,p,sinFiltro)}
   h+=`<div class="tabla" style="margin-bottom:12px"><table><thead>${CAB}</thead><tbody>${body||'<tr><td colspan="12" class="vacio">Sin equipos</td></tr>'}</tbody></table></div>`+tabs.join('');
   $('main').innerHTML=h;
   $('fSis').onchange=e=>{FILT.sis=e.target.value;renderMain()};
   $('fTxt').oninput=e=>{FILT.txt=e.target.value.toLowerCase();const p=e.target.selectionStart;renderMain();$('fTxt').focus();$('fTxt').setSelectionRange(p,p)};
   $('fProb').onchange=e=>{FILT.prob=e.target.checked;renderMain()};
   $('bCsv').onclick=()=>csv(lista,inst,piso);
-  if(puedeEd()){$('bNuevoEq').onclick=()=>abrirEq(null);$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
+  if(puedeEd()){$('bNuevoEq').onclick=()=>abrirEq(null);
+    document.querySelectorAll('[data-nuevo]').forEach(b=>b.onclick=()=>{const [pid,t]=b.dataset.nuevo.split('|');abrirEq(null,{piso_id:pid,tipo_equipo:t,nombre:(t+' '+(D.pisos.find(x=>x.id===pid)?.office||'')).trim()})});$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
     document.querySelectorAll('[data-red]').forEach(b=>b.onclick=()=>editarRed(inst));
     document.querySelectorAll('[data-srv]').forEach(b=>b.onclick=()=>editarServ(b.dataset.srv==='nuevo'?null:D.serv.find(x=>x.id===b.dataset.srv),inst));
     document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc)))}
@@ -321,11 +331,11 @@ const etqAcc=k=>ETQ[k]||k;
 
 // ---------- Equipo ----------
 const CAMPOS=['nombre','piso_id','sistema','tipo_equipo','tipo_chequeo','ip','puerto','ext','mac','ubicacion','sector','placa','version','estado','boca_equipo','boca_sistema','obs'];
-function abrirEq(e){
+function abrirEq(e,pre){
   editId=e?e.id:null; const ro=!puedeEd();
   $('eTit').textContent=e?(ro?'Equipo':'Editar equipo'):'Nuevo equipo';
   $('e_piso_id').innerHTML=D.inst.map(i=>`<optgroup label="${esc(i.nombre)}">${pisosDe(i.id).map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('')}</optgroup>`).join('');
-  const d=e||{piso_id:SEL.piso||pisosDe(SEL.inst)[0]?.id,sistema:'Help IP',estado:'OK'};
+  const d=e||Object.assign({piso_id:SEL.piso||pisosDe(SEL.inst)[0]?.id,sistema:'Help IP',estado:'OK'},pre||{});
   CAMPOS.forEach(k=>{const el=$('e_'+k);el.value=d[k]??'';el.disabled=ro});
   const c=D.cred[editId]||{};['usuario_web','clave_web','clave_ext'].forEach(k=>$('c_'+k).value=c[k]||'');
   document.querySelector('.soloCred').style.display=puedeEd()?'':'none';

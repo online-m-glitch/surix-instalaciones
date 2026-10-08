@@ -198,7 +198,8 @@ sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_IN'&&!ROL)iniciar()});
 async function cargar(){
   const [i,p,e]=await Promise.all([sb.from('inst_instalaciones').select('*').order('nombre'),sb.from('inst_pisos').select('*').order('orden'),sb.from('inst_equipos').select('*').order('id')]);
   for(const r of [i,p,e]) if(r.error){alert('Error al leer datos: '+r.error.message);return}
-  D.inst=i.data;D.pisos=p.data;D.eq=e.data;D.servCred={};
+  D.inst=i.data;D.pisos=p.data;D.eq=e.data.filter(x=>(x.tipo_equipo||'').toLowerCase()!=='servidor'); // los servidores van en 'Red y servidores', no como equipos
+  D.servCred={};
   {const s=await sb.from('inst_servidores').select('*').order('orden');D.serv=s.data||[]}
   if(puedeEd()){const [a,c]=await Promise.all([sb.from('inst_accesos').select('*'),sb.from('inst_credenciales').select('*')]);D.acc=a.data||[];D.cred={};(c.data||[]).forEach(x=>D.cred[x.equipo_id]=x);const sc=await sb.from('inst_servidor_cred').select('*');(sc.data||[]).forEach(x=>D.servCred[x.servidor_id]=x)}
   if(!SEL.inst&&D.inst.length)SEL.inst=D.inst.find(x=>x.id==='hospital-de-clinicas')?.id||D.inst[0].id;
@@ -303,17 +304,15 @@ function renderMain(){
   h+=kpis(lista);
   h+=`<div class="barra"><select id="fSis"><option value="">Todos los sistemas</option>${sistemas.map(s=>`<option ${FILT.sis===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
    <input id="fTxt" placeholder="Buscar equipo, IP, ext…" value="${esc(FILT.txt)}" style="width:220px"><label><input type="checkbox" id="fProb" ${FILT.prob?'checked':''} style="width:auto"> Solo con problemas</label></div>`;
-  const tabs=[];
-  if(puedeEd()){const ac=D.acc.filter(a=>pisos.some(p=>p.id===a.piso_id));
-    ac.forEach(a=>{const pn=D.pisos.find(p=>p.id===a.piso_id)?.nombre;tabs.push(`<div class="panel"><h3>Accesos · ${esc(pn)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`)});
-    if(piso&&!ac.length)tabs.push(`<div class="panel"><h3>Accesos · ${esc(piso.nombre)} <button data-acc="nuevo" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`)}
-  tabs.push(panelRed(inst,piso?[...new Set(eqDe(piso.id).map(e=>e.sistema))]:null)); // datos generales de la instalación, al final de cada piso/Office
-  let body='';
-  const sinFiltro=!FILT.sis&&!FILT.txt&&!FILT.prob;
+  // Cada piso/Office: sus equipos y enseguida sus accesos. Al final, Red y servidores.
+  const panelAcc=p=>{if(!puedeEd())return '';const a=D.acc.find(x=>x.piso_id===p.id);
+    if(!a)return `<div class="panel"><h3>Accesos · ${esc(p.nombre)} <button data-acc="nuevo" data-piso="${esc(p.id)}" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`;
+    return `<div class="panel"><h3>Accesos · ${esc(p.nombre)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`};
+  const sinFiltro=!FILT.sis&&!FILT.txt&&!FILT.prob;let bloques='';
+  if(!piso&&sinFiltro&&puedeEd())bloques+=panelFaltantes(pisos);
   for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length&&!(sinFiltro&&SEL.piso))continue;
-    if(!SEL.piso)body+=`<tr class="g"><td colspan="12">${esc(p.nombre)}</td></tr>`;
-    body+=gruposPiso(l,p,sinFiltro)}
-  h+=`<div class="tabla" style="margin-bottom:12px"><table><thead>${CAB}</thead><tbody>${body||'<tr><td colspan="12" class="vacio">Sin equipos</td></tr>'}</tbody></table></div>`+tabs.join('');
+    bloques+=`<div class="tabla" style="margin-bottom:8px"><table><thead>${SEL.piso?'':`<tr class="g"><td colspan="12">${esc(p.nombre)}</td></tr>`}${CAB}</thead><tbody>${gruposPiso(l,p,sinFiltro)}</tbody></table></div>`+(sinFiltro||SEL.piso?panelAcc(p):'')+'<div style="height:14px"></div>'}
+  h+=(bloques||'<div class="tabla"><table><tbody><tr><td colspan="12" class="vacio">Sin equipos</td></tr></tbody></table></div>')+panelRed(inst,piso?[...new Set(eqDe(piso.id).map(e=>e.sistema))]:null);
   $('main').innerHTML=h;
   $('fSis').onchange=e=>{FILT.sis=e.target.value;renderMain()};
   $('fTxt').oninput=e=>{FILT.txt=e.target.value.toLowerCase();const p=e.target.selectionStart;renderMain();$('fTxt').focus();$('fTxt').setSelectionRange(p,p)};
@@ -323,7 +322,7 @@ function renderMain(){
     document.querySelectorAll('[data-nuevo]').forEach(b=>b.onclick=()=>{const [pid,t]=b.dataset.nuevo.split('|');abrirEq(null,{piso_id:pid,tipo_equipo:t,nombre:(t+' '+(D.pisos.find(x=>x.id===pid)?.office||'')).trim()})});$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
     document.querySelectorAll('[data-red]').forEach(b=>b.onclick=()=>editarRed(inst));
     document.querySelectorAll('[data-srv]').forEach(b=>b.onclick=()=>editarServ(b.dataset.srv==='nuevo'?null:D.serv.find(x=>x.id===b.dataset.srv),inst));
-    document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc)))}
+    document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc),b.dataset.piso))}
 }
 $('main').addEventListener('click',ev=>{const tr=ev.target.closest('tr[data-id]');if(tr)abrirEq(D.eq.find(e=>e.id===tr.dataset.id))});
 const ETQ={office:'Office',panelUrl:'Panel enfermería (URL)',panelUser:'Panel usuario (Office)',panelPass:'Panel clave (Office)',pcIp:'PC IP',pcLogin:'PC login',phoneIp:'Teléfono IP',phoneModel:'Teléfono (marca y modelo)',phoneExt:'Teléfono ext.',phonePass:'Teléfono clave ext.',phoneWebUser:'Teléfono web usuario',phoneWebPass:'Teléfono web clave'};
@@ -373,6 +372,15 @@ $('gDel').onclick=async()=>{if(!confirm('¿Eliminar? Se borra todo lo que contie
 const slug=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||('x'+Date.now());
 
 // ---------- Red y servidores ----------
+// Lista de Offices con datos de acceso sin cargar (para completar)
+const REQ_ACC=['panelUrl','panelUser','panelPass','pcIp','pcLogin','phoneIp','phoneModel','phoneExt','phonePass','phoneWebUser','phoneWebPass'];
+function panelFaltantes(pisos){
+  const filas=pisos.filter(p=>{const l=eqDe(p.id);return !(l.length&&l.every(e=>catEq(e)===3))}).map(p=>{
+    const a=D.acc.find(x=>x.piso_id===p.id),d=a?.datos||{};const f=REQ_ACC.filter(k=>!(d[k]||'').toString().trim());
+    return f.length?`<tr><td><b>${esc(p.nombre)}</b>${d.office?`<div style="color:var(--sub)">${esc(d.office)}</div>`:''}</td><td>${f.map(k=>`<span class="chip" style="margin:1px">${esc(ETQ[k])}</span>`).join(' ')}</td><td><button data-acc="${a?esc(a.id):'nuevo'}" data-piso="${esc(p.id)}">Completar</button></td></tr>`:''}).join('');
+  if(!filas)return '<div class="panel" style="margin-bottom:14px"><h3>Accesos de los Office</h3><div style="color:var(--ok)">Todos los Office tienen los datos de acceso completos.</div></div>';
+  return `<div class="panel" style="margin-bottom:14px"><h3>Accesos de los Office · datos faltantes</h3><div class="tabla"><table><thead><tr><th>Piso / Office</th><th>Falta cargar</th><th></th></tr></thead><tbody>${filas}</tbody></table></div></div>`;
+}
 function panelRed(inst,sis){
   // sis: sistemas del piso/Office; muestra solo los servidores de esos sistemas (Help IP con llamadores, Voceo con voceo)
   const r=inst.red||{},ed=puedeEd();let sv=(D.serv||[]).filter(s=>s.instalacion_id===inst.id);
@@ -437,11 +445,12 @@ function editarPiso(p){
     if(r.error){alert(r.error.message);return false}SEL.inst=d.instalacion_id;SEL.piso=id},
   p&&ROL==='admin'?async()=>{const r=await sb.from('inst_pisos').delete().eq('id',p.id);if(r.error){alert(r.error.message);return false}}:null);
 }
-function editarAcc(a){
+function editarAcc(a,pid){
+  pid=pid||SEL.piso;
   const keys=Object.keys(ETQ);const d=a?.datos||{};
   gen('Accesos del piso',`<div class="grid">${keys.map(k=>`<label>${esc(ETQ[k])}<input data-k="${k}" value="${esc(d[k])}"></label>`).join('')}<label class="f3">Observaciones<textarea id="g_ao">${esc(a?.obs)}</textarea></label></div>`,
   async()=>{const datos={};document.querySelectorAll('#gBody [data-k]').forEach(x=>{if(x.value.trim())datos[x.dataset.k]=x.value.trim()});
-    const row={id:a?a.id:(SEL.piso+'-acc'),piso_id:a?a.piso_id:SEL.piso,datos,obs:$('g_ao').value.trim()||null,updated_at:new Date().toISOString()};
+    const row={id:a?a.id:(pid+'-acc'),piso_id:a?a.piso_id:pid,datos,obs:$('g_ao').value.trim()||null,updated_at:new Date().toISOString()};
     const r=await sb.from('inst_accesos').upsert(row);if(r.error){alert(r.error.message);return false}});
 }
 $('bNuevaInst').onclick=()=>editarInst(null);

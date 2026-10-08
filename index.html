@@ -307,7 +307,7 @@ function renderMain(){
   if(puedeEd()){const ac=D.acc.filter(a=>pisos.some(p=>p.id===a.piso_id));
     ac.forEach(a=>{const pn=D.pisos.find(p=>p.id===a.piso_id)?.nombre;tabs.push(`<div class="panel"><h3>Accesos · ${esc(pn)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`)});
     if(piso&&!ac.length)tabs.push(`<div class="panel"><h3>Accesos · ${esc(piso.nombre)} <button data-acc="nuevo" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`)}
-  tabs.push(panelRed(inst)); // datos generales de la instalación, al final de cada piso/Office
+  tabs.push(panelRed(inst,piso?[...new Set(eqDe(piso.id).map(e=>e.sistema))]:null)); // datos generales de la instalación, al final de cada piso/Office
   let body='';
   const sinFiltro=!FILT.sis&&!FILT.txt&&!FILT.prob;
   for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length&&!(sinFiltro&&SEL.piso))continue;
@@ -373,8 +373,10 @@ $('gDel').onclick=async()=>{if(!confirm('¿Eliminar? Se borra todo lo que contie
 const slug=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||('x'+Date.now());
 
 // ---------- Red y servidores ----------
-function panelRed(inst){
-  const r=inst.red||{},sv=(D.serv||[]).filter(s=>s.instalacion_id===inst.id),ed=puedeEd();
+function panelRed(inst,sis){
+  // sis: sistemas del piso/Office; muestra solo los servidores de esos sistemas (Help IP con llamadores, Voceo con voceo)
+  const r=inst.red||{},ed=puedeEd();let sv=(D.serv||[]).filter(s=>s.instalacion_id===inst.id);
+  if(sis&&sis.length)sv=sv.filter(s=>sis.includes(s.tipo||'Otro'));
   const campo=(l,v)=>`<div><span>${l}</span>${esc(v||'—')}</div>`;
   let h=`<div class="panel"><h3>Red y servidores${ed?`<span style="float:right"><button data-red="1">Editar red</button> <button data-srv="nuevo">+ Servidor</button></span>`:''}</h3>
   <div class="kv">${campo('Máscara',r.mascara)}${campo('Gateway',r.gateway)}${campo('Puerto de las placas',r.puerto)}${r.dns?campo('DNS',r.dns):''}${r.vlan?campo('VLAN',r.vlan):''}</div>${r.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(r.obs)}</div>`:''}`;

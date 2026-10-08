@@ -117,7 +117,7 @@ td.av{background:var(--av);color:var(--avT)}
   <div class="grid">
     <label class="f2">Nombre<input id="e_nombre"></label>
     <label>Piso / sector<select id="e_piso_id"></select></label>
-    <label>Sistema<select id="e_sistema"><option>Help IP</option><option>Voceo</option><option>Videoportero IP</option><option>Control de acceso</option><option>Otro</option></select></label>
+    <label>Sistema<select id="e_sistema"><option>Help IP</option><option>Voceo</option><option>Sony</option><option>Videoportero IP</option><option>Control de acceso</option><option>Otro</option></select></label>
     <label>Tipo de equipo<input id="e_tipo_equipo" list="dlTipos" placeholder="RCU, Teléfono IP, Parlante…"></label>
     <label>Chequeo automático<select id="e_tipo_chequeo"><option value="">— no se chequea —</option><option value="helpip">Placa Help IP</option><option value="telefono">Teléfono Grandstream</option><option value="fanvil">Teléfono Fanvil</option></select></label>
     <label>IP<input id="e_ip" class="mono"></label>
@@ -396,7 +396,7 @@ function editarRed(inst){
 function editarServ(s,inst){
   const c=s?((D.servCred||{})[s.id]||{}):{};
   gen(s?'Editar servidor':'Nuevo servidor',`<div class="grid"><label class="f2">Nombre<input id="s_n" value="${esc(s?.nombre)}" placeholder="Servidor Help IP"></label>
-   <label>Tipo<select id="s_t">${['Help IP','Voceo','Videoportero IP','Control de acceso','Otro'].map(t=>`<option ${s?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
+   <label>Tipo<select id="s_t">${['Help IP','Voceo','Sony','Videoportero IP','Control de acceso','Otro'].map(t=>`<option ${s?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
    <label>IP<input id="s_ip" class="mono" value="${esc(s?.ip)}"></label><label>Puerto<input id="s_p" type="number" value="${esc(s?.puerto)}"></label><label>Orden<input id="s_o" type="number" value="${s?.orden??((D.serv||[]).filter(x=>x.instalacion_id===inst.id).length+1)}"></label>
    <label class="f3">Acceso web (URL)<input id="s_u" value="${esc(s?.url)}" placeholder="http://10.65.6.250/enfermeria/"></label>
    <label>Usuario<input id="s_us" value="${esc(c.usuario)}"></label><label>Clave<input id="s_cl" value="${esc(c.clave)}"></label><label></label>

@@ -307,7 +307,8 @@ function renderMain(){
   // Cada piso/Office: sus equipos y enseguida sus accesos. Al final, Red y servidores.
   const panelAcc=p=>{if(!puedeEd())return '';const a=D.acc.find(x=>x.piso_id===p.id);
     if(!a)return `<div class="panel"><h3>Accesos · ${esc(p.nombre)} <button data-acc="nuevo" data-piso="${esc(p.id)}" style="float:right">Cargar</button></h3><div style="color:var(--sub)">Sin datos de acceso</div></div>`;
-    return `<div class="panel"><h3>Accesos · ${esc(p.nombre)} <button data-acc="${esc(a.id)}" style="float:right">Editar</button></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`};
+    const urlI=urlPanel(p,a);
+    return `<div class="panel"><h3>Accesos · ${esc(p.nombre)} <span style="float:right">${urlI?`<button data-inst-url="${esc(urlI)}" data-office="${esc(a.datos?.office||p.nombre)}">Datos para el instalador</button> `:''}<button data-acc="${esc(a.id)}">Editar</button></span></h3><div class="kv">${Object.entries(a.datos||{}).map(([k,v])=>`<div><span>${esc(etqAcc(k))}</span>${esc(v)}</div>`).join('')}</div>${a.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(a.obs)}</div>`:''}</div>`};
   const sinFiltro=!FILT.sis&&!FILT.txt&&!FILT.prob;let bloques='';
   if(!piso&&sinFiltro&&puedeEd())bloques+=panelFaltantes(pisos);
   for(const p of pisos){const l=lista.filter(e=>e.piso_id===p.id);if(!l.length&&!(sinFiltro&&SEL.piso))continue;
@@ -322,6 +323,8 @@ function renderMain(){
     document.querySelectorAll('[data-nuevo]').forEach(b=>b.onclick=()=>{const [pid,t]=b.dataset.nuevo.split('|');abrirEq(null,{piso_id:pid,tipo_equipo:t,nombre:(t+' '+(D.pisos.find(x=>x.id===pid)?.office||'')).trim()})});$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
     document.querySelectorAll('[data-red]').forEach(b=>b.onclick=()=>editarRed(inst));
     document.querySelectorAll('[data-srv]').forEach(b=>b.onclick=()=>editarServ(b.dataset.srv==='nuevo'?null:D.serv.find(x=>x.id===b.dataset.srv),inst));
+    document.querySelectorAll('[data-marca]').forEach(b=>b.onclick=()=>servidorPorMarca(inst));
+    document.querySelectorAll('[data-inst-url]').forEach(b=>b.onclick=()=>datosInstalador(b.dataset.instUrl,b.dataset.office));
     document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc),b.dataset.piso))}
 }
 $('main').addEventListener('click',ev=>{const tr=ev.target.closest('tr[data-id]');if(tr)abrirEq(D.eq.find(e=>e.id===tr.dataset.id))});
@@ -372,6 +375,15 @@ $('gDel').onclick=async()=>{if(!confirm('¿Eliminar? Se borra todo lo que contie
 const slug=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||('x'+Date.now());
 
 // ---------- Red y servidores ----------
+// URL del panel para el instalador: la del Office, o la del panel de enfermería de la instalación
+function urlPanel(p,a){const u=a?.datos?.panelUrl;if(u)return u;
+  const sv=(D.serv||[]).find(x=>x.instalacion_id===p.instalacion_id&&/enfermeria\/$/.test(x.url||''));return sv?sv.url:''}
+function datosInstalador(url,office){
+  gen('Datos para el instalador',`<div style="line-height:1.6">Instalador <b>SurixHelpIP_Setup.exe</b> en la PC de <b>${esc(office)}</b>.<br>Cuando pida la URL del panel, pegá:
+   <div style="display:flex;gap:6px;margin:8px 0"><input id="di_u" class="mono" value="${esc(url)}" readonly style="flex:1"><button id="di_c">Copiar</button></div>
+   <span style="color:var(--sub)">El usuario y la clave del Office se ingresan en el panel la primera vez (están en Accesos del Office).</span></div>`,async()=>{});
+  $('di_c').onclick=async()=>{try{await navigator.clipboard.writeText(url);$('di_c').textContent='Copiado'}catch(e){$('di_u').select();document.execCommand('copy');$('di_c').textContent='Copiado'}};
+}
 // Lista de Offices con datos de acceso sin cargar (para completar)
 const REQ_ACC=['panelUrl','panelUser','panelPass','pcIp','pcLogin','phoneIp','phoneModel','phoneExt','phonePass','phoneWebUser','phoneWebPass'];
 function panelFaltantes(pisos){
@@ -386,12 +398,12 @@ function panelRed(inst,sis){
   const r=inst.red||{},ed=puedeEd();let sv=(D.serv||[]).filter(s=>s.instalacion_id===inst.id);
   if(sis&&sis.length)sv=sv.filter(s=>sis.includes(s.tipo||'Otro'));
   const campo=(l,v)=>`<div><span>${l}</span>${esc(v||'—')}</div>`;
-  let h=`<div class="panel"><h3>Red y servidores${ed?`<span style="float:right"><button data-red="1">Editar red</button> <button data-srv="nuevo">+ Servidor</button></span>`:''}</h3>
+  let h=`<div class="panel"><h3>Red y servidores${ed?`<span style="float:right"><button data-red="1">Editar red</button> <button data-srv="nuevo">+ Servidor</button> <button data-marca="1">+ Servidor por marca</button></span>`:''}</h3>
   <div class="kv">${campo('Máscara',r.mascara)}${campo('Gateway',r.gateway)}${campo('Puerto de las placas',r.puerto)}${r.dns?campo('DNS',r.dns):''}${r.vlan?campo('VLAN',r.vlan):''}</div>${r.obs?`<div style="margin-top:6px;color:var(--sub)">${esc(r.obs)}</div>`:''}`;
   if(sv.length){
-    h+=`<div class="tabla" style="margin-top:10px"><table><thead><tr><th>Servidor</th><th>Tipo</th><th>IP</th><th>Puerto</th><th>Acceso web</th>${ed?'<th>Usuario</th><th>Clave</th>':''}<th>Observaciones</th>${ed?'<th></th>':''}</tr></thead><tbody>`+
+    h+=`<div class="tabla" style="margin-top:10px"><table><thead><tr><th>Servidor</th><th>Marca</th><th>Tipo</th><th>IP</th><th>Puerto</th><th>Acceso web</th>${ed?'<th>Usuario</th><th>Clave</th>':''}<th>Observaciones</th>${ed?'<th></th>':''}</tr></thead><tbody>`+
     sv.map(s=>{const c=(D.servCred||{})[s.id]||{};const url=s.url||(s.ip?`http://${s.ip}${s.puerto&&s.puerto!=80?':'+s.puerto:''}/`:'');
-      return `<tr><td><b>${esc(s.nombre)}</b></td><td>${esc(s.tipo||'')}</td><td class="mono">${esc(s.ip||'')}</td><td>${esc(s.puerto||'')}</td><td>${url?`<a href="${esc(url)}" target="_blank">${esc(url)}</a>`:''}</td>${ed?`<td class="mono">${esc(c.usuario||'')}</td><td class="mono">${esc(c.clave||'')}</td>`:''}<td class="obs">${esc(s.obs||'')}</td>${ed?`<td><button data-srv="${esc(s.id)}">Editar</button></td>`:''}</tr>`}).join('')+'</tbody></table></div>';
+      return `<tr><td><b>${esc(s.nombre)}</b></td><td>${esc(s.marca||'')}</td><td>${esc(s.tipo||'')}</td><td class="mono">${esc(s.ip||'')}</td><td>${esc(s.puerto||'')}</td><td>${url?`<a href="${esc(url)}" target="_blank">${esc(url)}</a>`:''}</td>${ed?`<td class="mono">${esc(c.usuario||'')}</td><td class="mono">${esc(c.clave||'')}</td>`:''}<td class="obs">${esc(s.obs||'')}</td>${ed?`<td><button data-srv="${esc(s.id)}">Editar</button></td>`:''}</tr>`}).join('')+'</tbody></table></div>';
   } else h+='<div style="margin-top:8px;color:var(--sub)">Sin servidores cargados</div>';
   return h+'</div>';
 }
@@ -403,16 +415,38 @@ function editarRed(inst){
     Object.keys(red).forEach(k=>{if(red[k]==='')delete red[k]});
     const x=await sb.from('inst_instalaciones').update({red,updated_at:new Date().toISOString()}).eq('id',inst.id);if(x.error){alert(x.error.message);return false}});
 }
+// Fichas de acceso por marca: entre clientes solo cambia la IP. (Sin claves: este archivo es público.)
+const MARCAS={
+  'Hiper PBX':[{n:'Central Hiper PBX (admin general)',r:'/',u:'admin',o:'Administración general de la central'},
+    {n:'Manager Surix Help IP',r:'/enfermeria/admin/',u:'Admin',o:'Administración de Help IP: offices, terminales, usuarios'},
+    {n:'Panel de enfermería (Office)',r:'/enfermeria/',u:'',o:'Usuario y clave según cada Office (ver Accesos del Office)'}],
+  'Surix':[{n:'Servidor Surix',r:'/',u:'',o:'Rutas de acceso de Surix a completar'}]
+};
+function servidorPorMarca(inst){
+  gen('Servidor por marca',`<div class="grid"><label>Marca<select id="sm_m">${Object.keys(MARCAS).map(m=>`<option>${m}</option>`).join('')}</select></label>
+   <label>Sistema<select id="sm_t">${['Help IP','Voceo','Sony','Videoportero IP','Control de acceso','Otro'].map(t=>`<option>${t}</option>`).join('')}</select></label>
+   <label>IP del servidor<input id="sm_ip" class="mono" placeholder="10.65.6.250"></label>
+   <div class="f3" id="sm_prev" style="color:var(--sub)"></div></div>`,
+  async()=>{const ip=$('sm_ip').value.trim(),m=$('sm_m').value,t=$('sm_t').value;if(!ip){alert('Falta la IP');return false}
+    const base=(D.serv||[]).filter(x=>x.instalacion_id===inst.id).length;
+    const filas=MARCAS[m].map((a,i)=>({id:slug(inst.id.slice(0,12)+'-'+ip+'-'+(a.r.replace(/\W/g,'')||'raiz')),instalacion_id:inst.id,nombre:a.n,tipo:t,marca:m,ip,puerto:80,url:'http://'+ip+a.r,obs:a.o,orden:base+i+1,updated_at:new Date().toISOString()}));
+    const x=await sb.from('inst_servidores').upsert(filas);if(x.error){alert(x.error.message);return false}
+    const cr=MARCAS[m].map((a,i)=>a.u?{servidor_id:filas[i].id,usuario:a.u,updated_at:new Date().toISOString()}:null).filter(Boolean);
+    if(cr.length){const y=await sb.from('inst_servidor_cred').upsert(cr,{onConflict:'servidor_id',ignoreDuplicates:true});if(y.error)alert('Servidores creados; usuarios no: '+y.error.message)}});
+  const prev=()=>{const ip=$('sm_ip').value.trim()||'IP';$('sm_prev').innerHTML='Se crean estos accesos (las claves se cargan después con Editar):<br>'+MARCAS[$('sm_m').value].map(a=>`• ${esc(a.n)}: <span class="mono">http://${esc(ip)}${esc(a.r)}</span>${a.u?' · usuario '+esc(a.u):''}`).join('<br>')};
+  $('sm_m').onchange=prev;$('sm_ip').oninput=prev;prev();
+}
 function editarServ(s,inst){
   const c=s?((D.servCred||{})[s.id]||{}):{};
   gen(s?'Editar servidor':'Nuevo servidor',`<div class="grid"><label class="f2">Nombre<input id="s_n" value="${esc(s?.nombre)}" placeholder="Servidor Help IP"></label>
    <label>Tipo<select id="s_t">${['Help IP','Voceo','Sony','Videoportero IP','Control de acceso','Otro'].map(t=>`<option ${s?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
+   <label>Marca<select id="s_m"><option value="">—</option>${Object.keys(MARCAS).concat('Otra').map(m=>`<option ${s?.marca===m?'selected':''}>${m}</option>`).join('')}</select></label>
    <label>IP<input id="s_ip" class="mono" value="${esc(s?.ip)}"></label><label>Puerto<input id="s_p" type="number" value="${esc(s?.puerto)}"></label><label>Orden<input id="s_o" type="number" value="${s?.orden??((D.serv||[]).filter(x=>x.instalacion_id===inst.id).length+1)}"></label>
    <label class="f3">Acceso web (URL)<input id="s_u" value="${esc(s?.url)}" placeholder="http://10.65.6.250/enfermeria/"></label>
    <label>Usuario<input id="s_us" value="${esc(c.usuario)}"></label><label>Clave<input id="s_cl" value="${esc(c.clave)}"></label><label></label>
    <label class="f3">Observaciones<textarea id="s_ob">${esc(s?.obs)}</textarea></label></div>`,
   async()=>{const n=$('s_n').value.trim();if(!n){alert('Falta el nombre');return false}
-    const d={instalacion_id:inst.id,nombre:n,tipo:$('s_t').value,ip:$('s_ip').value.trim()||null,puerto:+$('s_p').value||null,url:$('s_u').value.trim()||null,obs:$('s_ob').value.trim()||null,orden:+$('s_o').value||0,updated_at:new Date().toISOString()};
+    const d={instalacion_id:inst.id,nombre:n,tipo:$('s_t').value,marca:$('s_m').value||null,ip:$('s_ip').value.trim()||null,puerto:+$('s_p').value||null,url:$('s_u').value.trim()||null,obs:$('s_ob').value.trim()||null,orden:+$('s_o').value||0,updated_at:new Date().toISOString()};
     const id=s?s.id:slug(inst.id.slice(0,12)+'-'+n);
     const x=s?await sb.from('inst_servidores').update(d).eq('id',id):await sb.from('inst_servidores').insert({...d,id});if(x.error){alert(x.error.message);return false}
     const us=$('s_us').value.trim(),cl=$('s_cl').value;

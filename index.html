@@ -125,6 +125,8 @@ td.av{background:var(--av);color:var(--avT)}
     <label>Extensión<input id="e_ext"></label>
     <label>MAC<input id="e_mac" class="mono"></label>
     <label>Ubicación<input id="e_ubicacion"></label>
+    <label>Interno (dato de la terminal)<input id="e_interno" placeholder="IPAC 19 114"></label>
+    <label>Terminal<input id="e_terminal" placeholder="FC 09 (2 camas)"></label>
     <label>Sector<input id="e_sector"></label>
     <label>Placa / modelo<input id="e_placa"></label>
     <label>Firmware<input id="e_version"></label>
@@ -244,7 +246,7 @@ function filaEq(e,mostrarPiso){
   const pis=mostrarPiso?(D.pisos.find(p=>p.id===e.piso_id)?.nombre||''):'';
   const estCls=/falla|sin acceso/i.test(e.estado||'')?'mal':(e.estado==='OK'?'ok':'');
   return `<tr data-id="${esc(e.id)}" style="cursor:pointer">
-   <td>${esc(e.nombre)}${pis?`<div style="color:var(--sub);font-size:11px">${esc(pis)}</div>`:''}</td>
+   <td>${esc(e.nombre)}${(e.interno||e.terminal)?`<div style="color:var(--sub);font-size:11px">${esc([e.interno,e.terminal].filter(Boolean).join(' · '))}</div>`:''}${pis?`<div style="color:var(--sub);font-size:11px">${esc(pis)}</div>`:''}</td>
    <td><span class="chip">${esc(e.sistema)}</span> ${esc(e.tipo_equipo||'')}</td>
    <td class="mono">${e.ip?`<a href="http://${esc(e.ip)}${e.puerto&&e.puerto!=80?':'+e.puerto:''}/" target="_blank" onclick="event.stopPropagation()">${esc(e.ip)}</a>`:''}</td>
    <td>${esc(e.ext||'')}</td>
@@ -297,7 +299,7 @@ function renderMain(){
   const pisos=SEL.piso?D.pisos.filter(p=>p.id===SEL.piso):pisosDe(inst.id);
   let todos=pisos.flatMap(p=>eqDe(p.id));
   const sistemas=[...new Set(todos.map(e=>e.sistema))];
-  let lista=todos.filter(e=>(!FILT.sis||e.sistema===FILT.sis)&&(!FILT.prob||problema(e))&&(!FILT.txt||[e.nombre,e.ip,e.ext,e.ubicacion,e.sector].join(' ').toLowerCase().includes(FILT.txt)));
+  let lista=todos.filter(e=>(!FILT.sis||e.sistema===FILT.sis)&&(!FILT.prob||problema(e))&&(!FILT.txt||[e.nombre,e.ip,e.ext,e.ubicacion,e.sector,e.interno,e.terminal].join(' ').toLowerCase().includes(FILT.txt)));
   const piso=SEL.piso?pisos[0]:null;
   let h=`<div class="barra"><div style="flex:1"><div class="titulo">${esc(inst.nombre)}${piso?' · '+esc(piso.nombre):''}</div><div class="subt">${esc(inst.tipo)}${inst.cliente?' · '+esc(inst.cliente):''}${piso?.office?' · '+esc(piso.office):''}</div></div>
    ${puedeEd()?`<button id="bEdInst">Editar ${piso?'piso':'instalación'}</button><button class="pri" id="bNuevoEq">+ Equipo</button>`:''}<button id="bCsv">Exportar CSV</button></div>`;
@@ -332,7 +334,7 @@ const ETQ={office:'Office',panelUrl:'Panel enfermería (URL)',panelUser:'Panel u
 const etqAcc=k=>ETQ[k]||k;
 
 // ---------- Equipo ----------
-const CAMPOS=['nombre','piso_id','sistema','tipo_equipo','tipo_chequeo','ip','puerto','ext','mac','ubicacion','sector','placa','version','estado','boca_equipo','boca_sistema','obs'];
+const CAMPOS=['nombre','piso_id','sistema','tipo_equipo','tipo_chequeo','ip','puerto','ext','mac','ubicacion','interno','terminal','sector','placa','version','estado','boca_equipo','boca_sistema','obs'];
 function abrirEq(e,pre){
   editId=e?e.id:null; const ro=!puedeEd();
   $('eTit').textContent=e?(ro?'Equipo':'Editar equipo'):'Nuevo equipo';

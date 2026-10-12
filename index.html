@@ -209,7 +209,8 @@ async function cargar(){
 const pisosDe=iid=>D.pisos.filter(p=>p.instalacion_id===iid).sort((a,b)=>a.orden-b.orden);
 const eqDe=pid=>D.eq.filter(e=>e.piso_id===pid).sort((a,b)=>ipNum(a.ip)-ipNum(b.ip));
 function ipNum(ip){return String(ip||'').split('.').reduce((a,x)=>a*256+(+x||0),0)}
-function problema(e){const c=e.ult_chequeo;if(c)return !c.accesoWeb||c.registrado===false||(c.uptimeSeg>0&&c.uptimeSeg<86400);return /falla|sin acceso/i.test(e.estado||'')}
+// Problema = no responde o no registrado (un reinicio reciente es solo aviso, no cuenta)
+function problema(e){if(e.estado==='Fuera de servicio')return false;const c=e.ult_chequeo;if(c)return !c.accesoWeb||c.registrado===false;return /falla|sin acceso/i.test(e.estado||'')}
 
 // ---------- Render ----------
 function render(){renderArbol();renderMain()}

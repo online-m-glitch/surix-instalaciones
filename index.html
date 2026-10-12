@@ -244,6 +244,8 @@ function filaEq(e,mostrarPiso){
   const k=celdasChequeo(e), c=e.ult_chequeo||{};
   const macDist=c.mac&&e.mac&&normMac(c.mac)!==normMac(e.mac);
   const obs=[c.error,macDist?'MAC leída '+c.mac:'',e.obs].filter(Boolean).join(' · ');
+  const otro=macDist?D.eq.find(x=>x.id!==e.id&&x.mac&&normMac(x.mac)===normMac(c.mac)):null;
+  const btnMac=macDist&&puedeEd()?`<div style="margin-top:4px"><button data-macup="${esc(e.id)}" style="font-size:11px;padding:2px 8px">Actualizar MAC</button>${otro?` <span style="color:#9b1c28;font-size:11px">⚠ esa MAC figura en ${esc(otro.nombre)} (${esc(otro.ip||'')})</span>`:''}</div>`:'';
   const pis=mostrarPiso?(D.pisos.find(p=>p.id===e.piso_id)?.nombre||''):'';
   const estCls=/falla|sin acceso/i.test(e.estado||'')?'mal':(e.estado==='OK'?'ok':'');
   return `<tr data-id="${esc(e.id)}" style="cursor:pointer">
@@ -256,7 +258,18 @@ function filaEq(e,mostrarPiso){
    <td class="mono" style="font-size:11px;color:var(--sub)">${esc(k.cuando)}</td>
    <td class="mono ${macDist?'av':''}">${esc(e.mac||'')}</td>
    <td class="mono">${esc((c.firmware||e.version||'').replace(/^HELP_IP\//,'').slice(0,28))}</td>
-   <td class="obs">${esc(obs)}</td></tr>`;
+   <td class="obs">${esc(obs)}${btnMac}</td></tr>`;
+}
+// Cambio de placa: pasa la MAC leída por el chequeo a la MAC registrada y deja el historial en observaciones.
+async function actualizarMac(id){
+  const e=D.eq.find(x=>x.id===id);const c=e?.ult_chequeo||{};if(!e||!c.mac)return;
+  if(!confirm(`¿Actualizar la MAC de ${e.nombre} (${e.ip})?\n\nRegistrada: ${e.mac}\nLeída en el chequeo: ${c.mac}\n\nQueda anotado en observaciones como cambio de placa.`))return;
+  const hoy=new Date().toLocaleDateString('es-UY');
+  const nota=`MAC actualizada el ${hoy} (antes ${e.mac}, cambio de placa)`;
+  const d={mac:c.mac,obs:[e.obs,nota].filter(Boolean).join(' · '),updated_at:new Date().toISOString()};
+  if(c.firmware)d.version=c.firmware;
+  const r=await sb.from('inst_equipos').update(d).eq('id',id);if(r.error){alert(r.error.message);return}
+  await cargar();render();
 }
 // Agrupa los equipos de un piso por tipo, igual en todos los pisos.
 function catEq(e){const t=(e.tipo_equipo||'').toLowerCase();
@@ -330,7 +343,8 @@ function renderMain(){
     document.querySelectorAll('[data-inst-url]').forEach(b=>b.onclick=()=>datosInstalador(b.dataset.instUrl,b.dataset.office));
     document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>editarAcc(b.dataset.acc==='nuevo'?null:D.acc.find(a=>a.id===b.dataset.acc),b.dataset.piso))}
 }
-$('main').addEventListener('click',ev=>{const tr=ev.target.closest('tr[data-id]');if(tr)abrirEq(D.eq.find(e=>e.id===tr.dataset.id))});
+$('main').addEventListener('click',ev=>{const mb=ev.target.closest('[data-macup]');if(mb){ev.stopPropagation();actualizarMac(mb.dataset.macup);return}
+  const tr=ev.target.closest('tr[data-id]');if(tr)abrirEq(D.eq.find(e=>e.id===tr.dataset.id))});
 const ETQ={office:'Office',panelUrl:'Panel enfermería (URL)',panelUser:'Panel usuario (Office)',panelPass:'Panel clave (Office)',pcIp:'PC IP',pcLogin:'PC login',phoneIp:'Teléfono IP',phoneModel:'Teléfono (marca y modelo)',phoneExt:'Teléfono ext.',phonePass:'Teléfono clave ext.',phoneWebUser:'Teléfono web usuario',phoneWebPass:'Teléfono web clave'};
 const etqAcc=k=>ETQ[k]||k;
 

@@ -117,7 +117,7 @@ td.av{background:var(--av);color:var(--avT)}
   <div class="grid">
     <label class="f2">Nombre<input id="e_nombre"></label>
     <label>Piso / sector<select id="e_piso_id"></select></label>
-    <label>Sistema<select id="e_sistema"><option>Help IP</option><option>Voceo</option><option>Sony</option><option>Videoportero IP</option><option>Control de acceso</option><option>Otro</option></select></label>
+    <label>Sistema<select id="e_sistema"><option>Help IP</option><option>Voceo</option><option>Sony</option><option>Videoportero Surix IP</option><option>Control de acceso</option><option>Otro</option></select></label>
     <label>Tipo de equipo<input id="e_tipo_equipo" list="dlTipos" placeholder="RCU, Teléfono IP, Parlante…"></label>
     <label>Chequeo automático<select id="e_tipo_chequeo"><option value="">— no se chequea —</option><option value="helpip">Placa Help IP</option><option value="telefono">Teléfono Grandstream</option><option value="fanvil">Teléfono Fanvil</option><option value="red">Equipo de red (responde / no responde)</option></select></label>
     <label>IP<input id="e_ip" class="mono"></label>
@@ -142,7 +142,7 @@ td.av{background:var(--av);color:var(--avT)}
       <label>Clave extensión SIP<input id="c_clave_ext"></label>
     </div>
   </div>
-  <datalist id="dlTipos"><option>RCU</option><option>Teléfono IP</option><option>Parlante</option><option>Servidor</option><option>PC</option><option>Videoportero</option><option>Lector</option></datalist>
+  <datalist id="dlTipos"><option>RCU</option><option>Teléfono IP</option><option>Parlante</option><option>Servidor</option><option>PC</option><option>Frente de calle</option><option>Visor</option><option>Lector</option></datalist>
   <div class="pie"><button class="peligro" id="eDel">Eliminar</button><span class="sep"></span><button id="eHist">Historial</button><button id="eCan">Cancelar</button><button class="pri" id="eOk">Guardar</button></div>
 </div></div>
 
@@ -273,15 +273,20 @@ async function actualizarMac(id){
 }
 // Agrupa los equipos de un piso por tipo, igual en todos los pisos.
 function catEq(e){const t=(e.tipo_equipo||'').toLowerCase();
-  if(e.sistema==='Voceo')return 3; if(t==='rcu')return 0; if(t.includes('tel'))return 1; if(t==='pc')return 2; return 4}
-const CATS=['Llamadores (RCU)','Teléfonos IP','PC','Voceo · parlantes','Otros equipos'];
+  if(e.sistema==='Voceo')return 3; if(t.includes('frente'))return 4; if(t.includes('visor')||(e.sistema==='Videoportero Surix IP'&&t.includes('monitor')))return 5;
+  if(t==='rcu')return 0; if(t.includes('tel'))return 1; if(t==='pc')return 2; return 6}
+const CATS=['Llamadores (RCU)','Teléfonos IP','PC','Voceo · parlantes','Videoportero · frentes de calle','Videoportero · visores','Otros equipos'];
 // Todos los pisos/offices muestran siempre Llamadores, Teléfonos IP y PC (aunque estén vacíos), salvo los pisos solo de voceo.
-const TIPO_CAT=['RCU','Teléfono IP','PC'];
+const TIPO_CAT=['RCU','Teléfono IP','PC','Parlante','Frente de calle','Visor'];
+const esVideo=e=>{const c=catEq(e);return c===4||c===5||e.sistema==='Videoportero Surix IP'};
 function gruposPiso(l,p,base){
-  const g=[[],[],[],[],[]]; l.forEach(e=>g[catEq(e)].push(e));
+  const g=[[],[],[],[],[],[],[]]; l.forEach(e=>g[catEq(e)].push(e));
   const soloVoceo=l.length&&l.every(e=>catEq(e)===3);
+  const video=(p&&/portero|frente/i.test((p.nombre||'')+' '+(p.office||'')))||(l.length&&l.every(esVideo));
+  // Pisos de videoportero: siempre Frentes de calle y Visores. Resto (salvo voceo): Llamadores, Teléfonos IP y PC.
+  const fijos=video?[4,5]:(soloVoceo?[]:[0,1,2]);
   return g.map((v,i)=>{
-    if(!v.length&&!(base&&!soloVoceo&&i<3))return '';
+    if(!v.length&&!(base&&fijos.includes(i)))return '';
     const cab=`<tr class="sg"><td colspan="12">${CATS[i]} <span class="badge">${v.length}</span></td></tr>`;
     if(v.length)return cab+v.map(e=>filaEq(e)).join('');
     return cab+`<tr><td colspan="12" style="color:var(--sub);font-style:italic">Sin cargar${puedeEd()&&p?` <button data-nuevo="${esc(p.id)}|${TIPO_CAT[i]}" style="margin-left:8px;font-style:normal">+ agregar ${TIPO_CAT[i]}</button>`:''}</td></tr>`;
@@ -291,11 +296,11 @@ const CAB='<tr><th>Equipo</th><th>Tipo</th><th>IP</th><th>Ext.</th><th>Estado</t
 function kpis(lista){
   const ch=lista.filter(e=>e.ult_chequeo);let reg=0,noreg=0,sin=0,rei=0;
   ch.forEach(e=>{const c=e.ult_chequeo;if(!c.accesoWeb)sin++;else if(c.registrado===true)reg++;else noreg++;if(c.uptimeSeg>0&&c.uptimeSeg<86400)rei++});
-  const cat={rcu:0,voceo:0,tel:0,pc:0,otros:0};
-  lista.forEach(e=>{const t=(e.tipo_equipo||'').toLowerCase();
-    if(t==='rcu')cat.rcu++;else if(e.sistema==='Voceo')cat.voceo++;else if(t.includes('tel'))cat.tel++;else if(t==='pc')cat.pc++;else cat.otros++});
+  const cat={rcu:0,voceo:0,tel:0,pc:0,frente:0,visor:0,otros:0};
+  lista.forEach(e=>{const t=(e.tipo_equipo||'').toLowerCase();const k=catEq(e);
+    if(k===4)cat.frente++;else if(k===5)cat.visor++;else if(t==='rcu')cat.rcu++;else if(e.sistema==='Voceo')cat.voceo++;else if(t.includes('tel'))cat.tel++;else if(t==='pc')cat.pc++;else cat.otros++});
   const pl=(n,s,p)=>n+' '+(n===1?s:p);
-  const det=[cat.rcu&&pl(cat.rcu,'RCU','RCU'),cat.voceo&&pl(cat.voceo,'voceo','voceo'),cat.tel&&pl(cat.tel,'teléfono IP','teléfonos IP'),cat.pc&&pl(cat.pc,'PC','PC'),cat.otros&&pl(cat.otros,'otro','otros')].filter(Boolean).join(' · ');
+  const det=[cat.rcu&&pl(cat.rcu,'RCU','RCU'),cat.voceo&&pl(cat.voceo,'voceo','voceo'),cat.tel&&pl(cat.tel,'teléfono IP','teléfonos IP'),cat.pc&&pl(cat.pc,'PC','PC'),cat.frente&&pl(cat.frente,'frente de calle','frentes de calle'),cat.visor&&pl(cat.visor,'visor','visores'),cat.otros&&pl(cat.otros,'otro','otros')].filter(Boolean).join(' · ');
   return `<div class="kpis"><div class="kpi"><div class="n">${lista.length}</div><div class="l">equipos</div>${det?`<div class="l" style="margin-top:3px;color:var(--txt)">${det}</div>`:''}</div><div class="kpi"><div class="n">${ch.length}</div><div class="l">con chequeo</div></div>
   <div class="kpi ok"><div class="n">${reg}</div><div class="l">registrados</div></div><div class="kpi mal"><div class="n">${noreg}</div><div class="l">no registrados</div></div>
   <div class="kpi mal"><div class="n">${sin}</div><div class="l">sin acceso web</div></div><div class="kpi av"><div class="n">${rei}</div><div class="l">reiniciados 24 h</div></div></div>`;
@@ -336,7 +341,7 @@ function renderMain(){
   $('fProb').onchange=e=>{FILT.prob=e.target.checked;renderMain()};
   $('bCsv').onclick=()=>csv(lista,inst,piso);
   if(puedeEd()){$('bNuevoEq').onclick=()=>abrirEq(null);
-    document.querySelectorAll('[data-nuevo]').forEach(b=>b.onclick=()=>{const [pid,t]=b.dataset.nuevo.split('|');abrirEq(null,{piso_id:pid,tipo_equipo:t,nombre:(t+' '+(D.pisos.find(x=>x.id===pid)?.office||'')).trim()})});$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
+    document.querySelectorAll('[data-nuevo]').forEach(b=>b.onclick=()=>{const [pid,t]=b.dataset.nuevo.split('|');abrirEq(null,Object.assign({piso_id:pid,tipo_equipo:t,nombre:(t+' '+(D.pisos.find(x=>x.id===pid)?.office||'')).trim()},/frente|visor/i.test(t)?{sistema:'Videoportero Surix IP',tipo_chequeo:'helpip',puerto:8085}:t==='Parlante'?{sistema:'Voceo',tipo_chequeo:'red',puerto:8085}:{}))});$('bEdInst').onclick=()=>piso?editarPiso(piso):editarInst(inst);
     document.querySelectorAll('[data-red]').forEach(b=>b.onclick=()=>editarRed(inst));
     document.querySelectorAll('[data-srv]').forEach(b=>b.onclick=()=>editarServ(b.dataset.srv==='nuevo'?null:D.serv.find(x=>x.id===b.dataset.srv),inst));
     document.querySelectorAll('[data-marca]').forEach(b=>b.onclick=()=>servidorPorMarca(inst));
@@ -441,7 +446,7 @@ const MARCAS={
 };
 function servidorPorMarca(inst){
   gen('Servidor por marca',`<div class="grid"><label>Marca<select id="sm_m">${Object.keys(MARCAS).map(m=>`<option>${m}</option>`).join('')}</select></label>
-   <label>Sistema<select id="sm_t">${['Help IP','Voceo','Sony','Videoportero IP','Control de acceso','Otro'].map(t=>`<option>${t}</option>`).join('')}</select></label>
+   <label>Sistema<select id="sm_t">${['Help IP','Voceo','Sony','Videoportero Surix IP','Control de acceso','Otro'].map(t=>`<option>${t}</option>`).join('')}</select></label>
    <label>IP del servidor<input id="sm_ip" class="mono" placeholder="10.65.6.250"></label>
    <div class="f3" id="sm_prev" style="color:var(--sub)"></div></div>`,
   async()=>{const ip=$('sm_ip').value.trim(),m=$('sm_m').value,t=$('sm_t').value;if(!ip){alert('Falta la IP');return false}
@@ -456,7 +461,7 @@ function servidorPorMarca(inst){
 function editarServ(s,inst){
   const c=s?((D.servCred||{})[s.id]||{}):{};
   gen(s?'Editar servidor':'Nuevo servidor',`<div class="grid"><label class="f2">Nombre<input id="s_n" value="${esc(s?.nombre)}" placeholder="Servidor Help IP"></label>
-   <label>Tipo<select id="s_t">${['Help IP','Voceo','Sony','Videoportero IP','Control de acceso','Otro'].map(t=>`<option ${s?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
+   <label>Tipo<select id="s_t">${['Help IP','Voceo','Sony','Videoportero Surix IP','Control de acceso','Otro'].map(t=>`<option ${s?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
    <label>Marca<select id="s_m"><option value="">—</option>${Object.keys(MARCAS).concat('Otra').map(m=>`<option ${s?.marca===m?'selected':''}>${m}</option>`).join('')}</select></label>
    <label>IP<input id="s_ip" class="mono" value="${esc(s?.ip)}"></label><label>Puerto<input id="s_p" type="number" value="${esc(s?.puerto)}"></label><label>Orden<input id="s_o" type="number" value="${s?.orden??((D.serv||[]).filter(x=>x.instalacion_id===inst.id).length+1)}"></label>
    <label class="f3">Acceso web (URL)<input id="s_u" value="${esc(s?.url)}" placeholder="http://10.65.6.250/enfermeria/"></label>

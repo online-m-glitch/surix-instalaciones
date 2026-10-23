@@ -33,6 +33,7 @@ aside h4{margin:12px 0 6px;color:var(--sub);font-size:11px;text-transform:upperc
 .inst>div:hover,.piso:hover{background:var(--gris)}
 .inst .tipo{font-weight:400;color:var(--sub);font-size:11px}
 .fCat{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}.fCat button{padding:3px 8px;font-size:12px;border-radius:12px}.fCat button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+.paisH{margin:6px 0 2px 4px;padding:1px 6px;font-size:11px;font-weight:600;color:var(--azul);display:flex;justify-content:space-between}
 .catH{margin:10px 0 4px;padding:3px 6px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--sub);border-bottom:1px solid var(--borde);display:flex;justify-content:space-between}
 .piso{padding:5px 8px 5px 20px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between}
 .sel{background:#e3ebf8!important;color:var(--azul2)}
@@ -224,20 +225,26 @@ const abierta=id=>ABIERTAS[id]??(id===SEL.inst);
 // Categorías de instalación (campo Tipo): siempre agrupadas en este orden; el filtro queda guardado en el navegador.
 const CAT_ORD=['Hospital','Clínica','Edificio'],CAT_PL={Hospital:'Hospitales','Clínica':'Clínicas',Edificio:'Edificios'};
 const catDe=i=>CAT_ORD.includes(i.tipo)?i.tipo:'Otros';
+// Ubicación: "Localidad, Provincia/Departamento" (sin repetir si son iguales) y país.
+const lugar=i=>[i.localidad,i.provincia&&i.provincia!==i.localidad?i.provincia:''].filter(Boolean).join(', ');
+const PAIS_ORD=['Argentina','Uruguay'];const paisDe=i=>i.pais||'Sin país';
+const ordPais=(a,b)=>{const x=PAIS_ORD.indexOf(a),y=PAIS_ORD.indexOf(b);return (x<0?9:x)-(y<0?9:y)||a.localeCompare(b,'es')};
 let FCAT='';try{FCAT=localStorage.getItem('inst_fcat')||''}catch(e){}
 function renderArbol(){
   const cats=CAT_ORD.concat('Otros').filter(c=>D.inst.some(i=>catDe(i)===c));
   if(FCAT&&!cats.includes(FCAT))FCAT='';
   $('fCat').innerHTML=[['','Todos',D.inst.length]].concat(cats.map(c=>[c,CAT_PL[c]||c,D.inst.filter(i=>catDe(i)===c).length])).map(([k,t,n])=>`<button data-fc="${esc(k)}" class="${FCAT===k?'on':''}">${t} <b>${n}</b></button>`).join('');
-  $('arbol').innerHTML=cats.filter(c=>!FCAT||c===FCAT).map(c=>{const li=D.inst.filter(i=>catDe(i)===c).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
-    return `<div class="catH"><span>${CAT_PL[c]||c}</span><span>${li.length}</span></div>`+arbolDe(li)}).join('')||'<div class="vacio">Sin instalaciones</div>';
+  $('arbol').innerHTML=cats.filter(c=>!FCAT||c===FCAT).map(c=>{const li=D.inst.filter(i=>catDe(i)===c);
+    const paises=[...new Set(li.map(paisDe))].sort(ordPais);
+    return `<div class="catH"><span>${CAT_PL[c]||c}</span><span>${li.length}</span></div>`+paises.map(pa=>{const lp=li.filter(i=>paisDe(i)===pa).sort((a,b)=>lugar(a).localeCompare(lugar(b),'es')||a.nombre.localeCompare(b.nombre,'es'));
+      return `<div class="paisH"><span>${esc(pa)}</span><span>${lp.length}</span></div>`+arbolDe(lp)}).join('')}).join('')||'<div class="vacio">Sin instalaciones</div>';
 }
 $('fCat').onclick=ev=>{const b=ev.target.closest('[data-fc]');if(!b)return;FCAT=b.dataset.fc;try{localStorage.setItem('inst_fcat',FCAT)}catch(e){}
   const cur=D.inst.find(i=>i.id===SEL.inst);if(FCAT&&cur&&catDe(cur)!==FCAT){const pri=D.inst.filter(i=>catDe(i)===FCAT).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'))[0];if(pri){SEL.inst=pri.id;SEL.piso=null}}render()};
 function arbolDe(lista){
   return lista.map(i=>{const ps=pisosDe(i.id),ab=abierta(i.id);
     const prob=ps.reduce((t,p)=>t+eqDe(p.id).filter(problema).length,0);
-    return `<div class="inst"><div class="${SEL.inst===i.id&&!SEL.piso?'sel':''}" data-i="${esc(i.id)}"><span class="tog" data-t="${esc(i.id)}">${ab?'▾':'▸'}</span>${esc(i.nombre)}${catDe(i)==="Otros"?` <span class="tipo">${esc(i.tipo)}</span>`:""}${!ab&&prob?` <span class="badge mal">${prob}</span>`:''}</div>`+
+    return `<div class="inst"><div class="${SEL.inst===i.id&&!SEL.piso?'sel':''}" data-i="${esc(i.id)}"><span class="tog" data-t="${esc(i.id)}">${ab?'▾':'▸'}</span>${esc(i.nombre)}${catDe(i)==="Otros"?` <span class="tipo">${esc(i.tipo)}</span>`:""}${lugar(i)?` <span class="tipo">· ${esc(lugar(i))}</span>`:""}${!ab&&prob?` <span class="badge mal">${prob}</span>`:''}</div>`+
     (ab?ps.map(p=>{const n=eqDe(p.id).filter(problema).length;return `<div class="piso ${SEL.piso===p.id?'sel':''}" data-p="${esc(p.id)}" data-i="${esc(i.id)}"><span>${esc(p.nombre)}</span>${n?`<span class="badge mal">${n}</span>`:''}</div>`}).join(''):'')+'</div>'}).join('');
 }
 function todasArbol(v){D.inst.filter(i=>!FCAT||catDe(i)===FCAT).forEach(i=>ABIERTAS[i.id]=v);guardarAb();renderArbol()}
@@ -336,7 +343,7 @@ function renderMain(){
   const sistemas=[...new Set(todos.map(e=>e.sistema))];
   let lista=todos.filter(e=>(!FILT.sis||e.sistema===FILT.sis)&&(!FILT.prob||problema(e))&&(!FILT.txt||[e.nombre,e.ip,e.ext,e.ubicacion,e.sector,e.interno,e.terminal].join(' ').toLowerCase().includes(FILT.txt)));
   const piso=SEL.piso?pisos[0]:null;
-  let h=`<div class="barra"><div style="flex:1"><div class="titulo">${esc(inst.nombre)}${piso?' · '+esc(piso.nombre):''}</div><div class="subt">${esc(inst.tipo)}${inst.cliente?' · '+esc(inst.cliente):''}${piso?.office?' · '+esc(piso.office):''}</div></div>
+  let h=`<div class="barra"><div style="flex:1"><div class="titulo">${esc(inst.nombre)}${piso?' · '+esc(piso.nombre):''}</div><div class="subt">${esc(inst.tipo)}${inst.cliente?' · '+esc(inst.cliente):''}${inst.pais||lugar(inst)?' · 📍 '+esc([lugar(inst),inst.pais].filter(Boolean).join(' · ')):''}${piso?.office?' · '+esc(piso.office):''}</div></div>
    ${puedeEd()?`<button id="bEdInst">Editar ${piso?'piso':'instalación'}</button><button class="pri" id="bNuevoEq">+ Equipo</button>`:''}<button id="bCsv">Exportar CSV</button></div>`;
   h+=kpis(lista);
   h+=`<div class="barra"><select id="fSis"><option value="">Todos los sistemas</option>${sistemas.map(s=>`<option ${FILT.sis===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
@@ -496,11 +503,14 @@ function editarInst(i){
   gen(i?'Editar instalación':'Nueva instalación',`<div class="grid"><label class="f2">Nombre<input id="g_n" value="${esc(i?.nombre)}"></label>
    <label>Tipo<select id="g_t">${['Empresa','Clínica','Hospital','Colegio','Edificio','Otro'].map(t=>`<option ${i?.tipo===t?'selected':''}>${t}</option>`).join('')}</select></label>
    <label class="f3">Cliente<input id="g_c" value="${esc(i?.cliente)}"></label>
+   <label>País<select id="g_pais">${['','Argentina','Uruguay','Otro'].map(t=>`<option ${(i?.pais||'')===t?'selected':''} value="${t}">${t||'—'}</option>`).join('')}</select></label>
+   <label>Provincia / Departamento<input id="g_prov" value="${esc(i?.provincia)}" placeholder="Buenos Aires, CABA, Montevideo…"></label>
+   <label>Localidad<input id="g_loc" value="${esc(i?.localidad)}" placeholder="Vicente López, Melo…"></label>
    <label>Máscara<input id="g_mask" value="${esc(red.mascara)}"></label><label>Gateway<input id="g_gw" value="${esc(red.gateway)}"></label>
    <label>Puerto placas<input id="g_pto" value="${esc(red.puerto)}"></label><label class="f2">Obs. de red<input id="g_robs" value="${esc(red.obs)}"></label>
    <label class="f3">Notas<textarea id="g_notas">${esc(i?.notas)}</textarea></label></div>`,
   async()=>{const n=$('g_n').value.trim();if(!n){alert('Falta el nombre');return false}
-    const d={nombre:n,tipo:$('g_t').value,cliente:$('g_c').value.trim()||null,notas:$('g_notas').value.trim()||null,updated_at:new Date().toISOString(),
+    const d={nombre:n,tipo:$('g_t').value,cliente:$('g_c').value.trim()||null,pais:$('g_pais').value||null,provincia:$('g_prov').value.trim()||null,localidad:$('g_loc').value.trim()||null,notas:$('g_notas').value.trim()||null,updated_at:new Date().toISOString(),
       red:{...red,mascara:$('g_mask').value.trim(),gateway:$('g_gw').value.trim(),puerto:$('g_pto').value.trim(),obs:$('g_robs').value.trim()}};
     const r=i?await sb.from('inst_instalaciones').update(d).eq('id',i.id):await sb.from('inst_instalaciones').insert({...d,id:slug(n)});
     if(r.error){alert(r.error.message);return false} if(!i)SEL.inst=slug(n)},

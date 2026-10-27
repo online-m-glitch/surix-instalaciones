@@ -263,8 +263,16 @@ function celdasChequeo(e){
   const up=[c.uptime||'—',(c.uptimeSeg>0&&c.uptimeSeg<86400)?'av':''];
   return {acc,reg,up,cuando:e.ult_chequeo_at?new Date(e.ult_chequeo_at).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''};
 }
+// Porteros Surix: acceso remoto por el proxy de Surix (cambia solo la MAC) y firmware mínimo v1.2.3 para la VPN.
+const PORTERO_FW='1.2.3';
+const esPortero=e=>e.sistema==='Videoportero Surix IP'||/frente|visor/i.test(e.tipo_equipo||'');
+const urlProxy=mac=>'https://proxy.configgateway.com/?mac='+encodeURIComponent(String(mac).trim().toLowerCase().replace(/[:.]/g,'-'));
+const fwPortero=e=>{const f=(e.ult_chequeo||{}).firmware||e.version||'';return /v?1\.2\.3\b/.test(f)?'ok':(f?'vieja':'?')};
 function filaEq(e,mostrarPiso){
   const k=celdasChequeo(e), c=e.ult_chequeo||{};
+  const port=esPortero(e), fwp=port?fwPortero(e):'';
+  const remoto=port&&e.mac?`<div><a href="${urlProxy(e.mac)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:11px">🌐 Acceso remoto</a></div>`:'';
+  const avisoFw=port&&fwp!=='ok'?`<div style="margin-top:3px"><span class="badge" style="background:var(--av);color:var(--avT)">Firmware v${PORTERO_FW} ${fwp==='vieja'?'pendiente':'sin verificar'}</span></div>`:'';
   const macDist=c.mac&&e.mac&&normMac(c.mac)!==normMac(e.mac);
   const obs=[c.error,macDist?'MAC leída '+c.mac:'',e.obs].filter(Boolean).join(' · ');
   const otro=macDist?D.eq.find(x=>x.id!==e.id&&x.mac&&normMac(x.mac)===normMac(c.mac)):null;
@@ -274,14 +282,14 @@ function filaEq(e,mostrarPiso){
   return `<tr data-id="${esc(e.id)}" style="cursor:pointer">
    <td>${esc(e.nombre)}${(e.interno||e.terminal)?`<div style="color:var(--sub);font-size:11px">${esc([e.interno,e.terminal].filter(Boolean).join(' · '))}</div>`:''}${pis?`<div style="color:var(--sub);font-size:11px">${esc(pis)}</div>`:''}</td>
    <td><span class="chip">${esc(e.sistema)}</span> ${esc(e.tipo_equipo||'')}</td>
-   <td class="mono">${e.ip?`<a href="http://${esc(e.ip)}${e.puerto&&e.puerto!=80?':'+e.puerto:''}/" target="_blank" onclick="event.stopPropagation()">${esc(e.ip)}</a>`:''}</td>
+   <td class="mono">${e.ip?`<a href="http://${esc(e.ip)}${e.puerto&&e.puerto!=80?':'+e.puerto:''}/" target="_blank" onclick="event.stopPropagation()">${esc(e.ip)}</a>`:''}${remoto}</td>
    <td>${esc(e.ext||'')}</td>
    <td class="${estCls}">${esc(e.estado||'')}</td>
    <td class="${k.acc[1]}">${k.acc[0]}</td><td class="${k.reg[1]}">${k.reg[0]}</td><td class="${k.up[1]}">${esc(k.up[0])}</td>
    <td class="mono" style="font-size:11px;color:var(--sub)">${esc(k.cuando)}</td>
    <td class="mono ${macDist?'av':''}">${esc(e.mac||'')}</td>
    <td class="mono">${esc((c.firmware||e.version||'').replace(/^HELP_IP\//,'').slice(0,28))}</td>
-   <td class="obs">${esc(obs)}${btnMac}</td></tr>`;
+   <td class="obs">${esc(obs)}${btnMac}${avisoFw}</td></tr>`;
 }
 // Cambio de placa: pasa la MAC leída por el chequeo a la MAC registrada y deja el historial en observaciones.
 async function actualizarMac(id){

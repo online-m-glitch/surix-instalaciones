@@ -282,7 +282,7 @@ function filaEq(e,mostrarPiso){
   return `<tr data-id="${esc(e.id)}" style="cursor:pointer">
    <td>${esc(e.nombre)}${(e.interno||e.terminal)?`<div style="color:var(--sub);font-size:11px">${esc([e.interno,e.terminal].filter(Boolean).join(' · '))}</div>`:''}${pis?`<div style="color:var(--sub);font-size:11px">${esc(pis)}</div>`:''}</td>
    <td><span class="chip">${esc(e.sistema)}</span> ${esc(e.tipo_equipo||'')}</td>
-   <td class="mono">${e.ip?`<a href="http://${esc(e.ip)}${e.puerto&&e.puerto!=80?':'+e.puerto:''}/" target="_blank" onclick="event.stopPropagation()">${esc(e.ip)}</a>`:''}${remoto}</td>
+   <td class="mono">${e.ip?`<a href="http://${esc(e.ip)}${e.puerto&&e.puerto!=80?':'+e.puerto:''}/" target="_blank" onclick="event.stopPropagation()">${esc(e.ip)}</a>${port?' <span class="chip" title="IP de la VPN (server1.identaip.com). La IP de la red local está en Observaciones.">VPN</span>':''}`:''}${remoto}</td>
    <td>${esc(e.ext||'')}</td>
    <td class="${estCls}">${esc(e.estado||'')}</td>
    <td class="${k.acc[1]}">${k.acc[0]}</td><td class="${k.reg[1]}">${k.reg[0]}</td><td class="${k.up[1]}">${esc(k.up[0])}</td>
